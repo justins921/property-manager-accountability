@@ -2,15 +2,26 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { InspectionMedia } from "@/lib/types";
 
-const BUCKET = "vacancy-media";
+export interface GalleryItem {
+  id: string;
+  storage_path: string;
+  media_type?: "video" | "photo";
+  caption?: string | null;
+}
 
 /**
- * Renders private inspection media by requesting short-lived signed URLs from
- * Supabase Storage (the bucket is private; access is enforced by RLS).
+ * Renders private media by requesting short-lived signed URLs from Supabase
+ * Storage (buckets are private; access is enforced by RLS). Works for both the
+ * vacancy-media and property-media buckets.
  */
-export function MediaGallery({ media }: { media: InspectionMedia[] }) {
+export function MediaGallery({
+  media,
+  bucket = "vacancy-media",
+}: {
+  media: GalleryItem[];
+  bucket?: string;
+}) {
   const [urls, setUrls] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -20,7 +31,7 @@ export function MediaGallery({ media }: { media: InspectionMedia[] }) {
       const paths = media.map((m) => m.storage_path);
       if (paths.length === 0) return;
       const { data } = await supabase.storage
-        .from(BUCKET)
+        .from(bucket)
         .createSignedUrls(paths, 60 * 60);
       if (cancelled || !data) return;
       const map: Record<string, string> = {};
@@ -33,7 +44,7 @@ export function MediaGallery({ media }: { media: InspectionMedia[] }) {
     return () => {
       cancelled = true;
     };
-  }, [media]);
+  }, [media, bucket]);
 
   if (media.length === 0) return null;
 

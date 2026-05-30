@@ -175,3 +175,75 @@ export const STAGE_LABELS: Record<VacancyStage, string> = {
   leased: "Leased",
   completed: "Completed",
 };
+
+// ── Routine property inspections (the upkeep accountability pillar) ────────
+
+export type InspectionFrequency =
+  | "weekly"
+  | "monthly"
+  | "quarterly"
+  | "semiannual"
+  | "annual";
+
+export type InspectionItemResult = "pass" | "needs_attention" | "na";
+
+export interface InspectionSchedule {
+  id: string;
+  org_id: string;
+  property_id: string;
+  manager_id: string | null;
+  frequency: InspectionFrequency;
+  anchor_date: string;
+  next_due_date: string;
+  active: boolean;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PropertyInspection {
+  id: string;
+  org_id: string;
+  property_id: string;
+  schedule_id: string | null;
+  manager_id: string | null;
+  due_date: string;
+  completed_at: string | null;
+  completed_by: string | null;
+  overall_notes: string | null;
+  created_at: string;
+}
+
+export interface PropertyInspectionItem {
+  id: string;
+  org_id: string;
+  inspection_id: string;
+  area_key: string;
+  result: InspectionItemResult;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface PropertyInspectionMedia {
+  id: string;
+  org_id: string;
+  inspection_id: string;
+  item_id: string | null;
+  storage_path: string;
+  caption: string | null;
+  created_at: string;
+}
+
+export const FREQUENCY_LABELS: Record<InspectionFrequency, string> = {
+  weekly: "Weekly",
+  monthly: "Monthly",
+  quarterly: "Quarterly",
+  semiannual: "Every 6 months",
+  annual: "Annually",
+};
+
+export const ITEM_RESULT_LABELS: Record<InspectionItemResult, string> = {
+  pass: "Pass",
+  needs_attention: "Needs attention",
+  na: "N/A",
+};

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Building2,
+  ClipboardCheck,
   ClipboardList,
   Gauge,
   LogOut,
@@ -17,6 +18,7 @@ import type { MemberRole } from "@/lib/types";
 const NAV = [
   { href: "/dashboard", label: "Owner Dashboard", icon: Gauge },
   { href: "/vacancies", label: "Vacancies", icon: ClipboardList },
+  { href: "/inspections", label: "Inspections", icon: ClipboardCheck },
   { href: "/properties", label: "Properties", icon: Building2 },
   { href: "/scorecard", label: "PM Scorecard", icon: Trophy },
   { href: "/team", label: "Team", icon: Users },

@@ -5,16 +5,25 @@ import {
   vacancyCostInRange,
   vacancyStatus,
 } from "@/lib/calculations";
+import {
+  daysUntilDue,
+  routineInspectionStatus,
+} from "@/lib/inspections-calc";
 import { requireOrgContext } from "@/lib/org";
-import { getProfileMap, getVacancies } from "@/lib/queries";
+import {
+  getProfileMap,
+  getRoutineInspections,
+  getVacancies,
+} from "@/lib/queries";
 import { Card, LinkButton, PageHeader, StatCard, StatusBadge } from "@/components/ui";
 import { formatCurrency, formatDays } from "@/lib/utils";
 
 export default async function DashboardPage() {
   const ctx = await requireOrgContext();
-  const [vacancies, profiles] = await Promise.all([
+  const [vacancies, profiles, inspections] = await Promise.all([
     getVacancies(ctx.org.id),
     getProfileMap(ctx.org.id),
+    getRoutineInspections(ctx.org.id),
   ]);
 
   const now = new Date();
@@ -24,14 +33,6 @@ export default async function DashboardPage() {
   const active = vacancies.filter((v) => v.stage !== "completed" && !v.closed_at);
   const overdue = active.filter((v) => vacancyStatus(v, now) === "red");
 
-  const completed = vacancies.filter((v) => v.actual_move_in_date);
-  const avgVacancy =
-    completed.length > 0
-      ? completed.reduce((s, v) => s + daysVacant(v, now), 0) / completed.length
-      : active.length > 0
-        ? active.reduce((s, v) => s + daysVacant(v, now), 0) / active.length
-        : null;
-
   const costThisMonth = vacancies.reduce(
     (s, v) => s + vacancyCostInRange(v, monthStart, now, now),
     0,
@@ -39,6 +40,11 @@ export default async function DashboardPage() {
   const costThisYear = vacancies.reduce(
     (s, v) => s + vacancyCostInRange(v, yearStart, now, now),
     0,
+  );
+
+  const openInspections = inspections.filter((i) => !i.completed_at);
+  const overdueInspections = openInspections.filter(
+    (i) => daysUntilDue(i, now) < 0,
   );
 
   const rankings = buildScorecards(vacancies, now)
@@ -66,11 +72,16 @@ export default async function DashboardPage() {
           value={overdue.length}
           accent={overdue.length > 0 ? "red" : "green"}
         />
-        <StatCard label="Average vacancy" value={formatDays(avgVacancy)} />
         <StatCard
           label="Vacancy cost this month"
           value={formatCurrency(costThisMonth)}
           sub={`${formatCurrency(costThisYear)} this year`}
+        />
+        <StatCard
+          label="Inspections overdue"
+          value={overdueInspections.length}
+          sub={`${openInspections.length} open`}
+          accent={overdueInspections.length > 0 ? "red" : "green"}
         />
       </div>
 

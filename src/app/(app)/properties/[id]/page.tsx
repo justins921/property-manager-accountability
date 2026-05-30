@@ -7,11 +7,20 @@ import {
   vacancyCost,
   vacancyStatus,
 } from "@/lib/calculations";
+import { routineInspectionStatus } from "@/lib/inspections-calc";
 import { requireOrgContext } from "@/lib/org";
-import { getProfileMap, getProperty, getVacancies } from "@/lib/queries";
+import {
+  getInspectionSchedule,
+  getMembers,
+  getProfileMap,
+  getProperty,
+  getRoutineInspections,
+  getVacancies,
+} from "@/lib/queries";
+import { InspectionScheduleForm } from "@/components/forms/inspection-schedule-form";
 import { Card, PageHeader, StatCard, StatusBadge } from "@/components/ui";
-import { STAGE_LABELS } from "@/lib/types";
-import { formatCurrency, formatDays } from "@/lib/utils";
+import { FREQUENCY_LABELS, STAGE_LABELS } from "@/lib/types";
+import { formatCurrency, formatDate, formatDays } from "@/lib/utils";
 
 export default async function PropertyDetailPage({
   params,
@@ -20,15 +29,24 @@ export default async function PropertyDetailPage({
 }) {
   const { id } = await params;
   const ctx = await requireOrgContext();
-  const [property, allVacancies, profiles] = await Promise.all([
-    getProperty(ctx.org.id, id),
-    getVacancies(ctx.org.id),
-    getProfileMap(ctx.org.id),
-  ]);
+  const [property, allVacancies, profiles, schedule, members, allInspections] =
+    await Promise.all([
+      getProperty(ctx.org.id, id),
+      getVacancies(ctx.org.id),
+      getProfileMap(ctx.org.id),
+      getInspectionSchedule(ctx.org.id, id),
+      getMembers(ctx.org.id),
+      getRoutineInspections(ctx.org.id),
+    ]);
   if (!property) notFound();
 
   const now = new Date();
   const vacancies = allVacancies.filter((v) => v.property_id === id);
+  const inspections = allInspections.filter((i) => i.property_id === id);
+  const managers = members.filter(
+    (m) => m.role === "manager" || m.role === "owner",
+  );
+  const isOwner = ctx.role === "owner";
   const active = vacancies.filter((v) => v.stage !== "completed" && !v.closed_at);
 
   const turnTimes = vacancies
@@ -132,6 +150,70 @@ export default async function PropertyDetailPage({
                   </li>
                 );
               })}
+            </ul>
+          )}
+        </Card>
+      </div>
+
+      {/* Routine inspection schedule + history */}
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Card>
+          <h2 className="mb-1 text-lg font-semibold text-slate-900">
+            Inspection schedule
+          </h2>
+          <p className="mb-4 text-sm text-slate-500">
+            Recurring condition checks for this property.
+          </p>
+          {isOwner ? (
+            <InspectionScheduleForm
+              propertyId={id}
+              managers={managers}
+              schedule={schedule}
+            />
+          ) : schedule ? (
+            <p className="text-sm text-slate-600">
+              {FREQUENCY_LABELS[schedule.frequency]} · next due{" "}
+              {formatDate(schedule.next_due_date)}
+              {schedule.active ? "" : " (paused)"}
+            </p>
+          ) : (
+            <p className="text-sm text-slate-500">
+              No schedule set. Ask an owner to configure one.
+            </p>
+          )}
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <h2 className="mb-4 text-lg font-semibold text-slate-900">
+            Recent inspections
+          </h2>
+          {inspections.length === 0 ? (
+            <p className="text-sm text-slate-500">No inspections yet.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {inspections.slice(0, 8).map((i) => (
+                <li key={i.id}>
+                  <Link
+                    href={`/inspections/${i.id}`}
+                    className="flex items-center justify-between py-3 transition hover:opacity-75"
+                  >
+                    <div>
+                      <p className="font-medium text-slate-900">
+                        Due {formatDate(i.due_date)}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {i.completed_at
+                          ? `Completed ${formatDate(i.completed_at.slice(0, 10))}`
+                          : "Not completed"}
+                      </p>
+                    </div>
+                    <StatusBadge
+                      status={routineInspectionStatus(i, now)}
+                      showLabel={false}
+                    />
+                  </Link>
+                </li>
+              ))}
             </ul>
           )}
         </Card>

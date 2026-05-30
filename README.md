@@ -43,6 +43,10 @@ then open the **SQL editor** and run [`supabase/schema.sql`](supabase/schema.sql
 This creates all tables, enums, RLS policies, triggers, and the private
 `vacancy-media` storage bucket.
 
+Then run [`supabase/routine-inspections.sql`](supabase/routine-inspections.sql)
+to add the routine property-inspection pillar (schedules, inspections, the
+`property-media` bucket). It's additive and idempotent.
+
 > By default Supabase requires email confirmation. For the smoothest local dev
 > you can disable it under **Authentication → Providers → Email**.
 

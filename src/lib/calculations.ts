@@ -234,18 +234,29 @@ export function missedDeadlines(
 export function dueReminder(
   next: NextDeadline,
 ): { type: ReminderType } | null {
-  const overdueBy = -next.daysUntil;
+  const type = reminderTypeForDaysUntil(next.daysUntil);
+  return type ? { type } : null;
+}
+
+/**
+ * The reminder rung that fires for a given days-until value (negative = days
+ * overdue). Shared by vacancy deadlines and routine-inspection due dates.
+ */
+export function reminderTypeForDaysUntil(
+  daysUntil: number,
+): ReminderType | null {
+  const overdueBy = -daysUntil;
   switch (true) {
-    case next.daysUntil === 1:
-      return { type: "pre_deadline" };
-    case next.daysUntil === 0:
-      return { type: "deadline_day" };
+    case daysUntil === 1:
+      return "pre_deadline";
+    case daysUntil === 0:
+      return "deadline_day";
     case overdueBy === 3:
-      return { type: "overdue_3" };
+      return "overdue_3";
     case overdueBy === 7:
-      return { type: "overdue_7" };
+      return "overdue_7";
     case overdueBy === 14:
-      return { type: "overdue_14" };
+      return "overdue_14";
     default:
       return null;
   }

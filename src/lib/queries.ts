@@ -3,9 +3,13 @@ import type {
   DelayExplanation,
   Inspection,
   InspectionMedia,
+  InspectionSchedule,
   OrgMember,
   Profile,
   Property,
+  PropertyInspection,
+  PropertyInspectionItem,
+  PropertyInspectionMedia,
   Reminder,
   Vacancy,
 } from "./types";
@@ -129,5 +133,100 @@ export async function getVacancyDetail(
       (inspections as (Inspection & { media: InspectionMedia[] })[]) ?? [],
     delays: (delays as DelayExplanation[]) ?? [],
     reminders: (reminders as Reminder[]) ?? [],
+  };
+}
+
+// ── Routine inspections ────────────────────────────────────────────────────
+
+/** All routine inspections in an org, with their property, newest due first. */
+export async function getRoutineInspections(
+  orgId: string,
+): Promise<(PropertyInspection & { property: Property | null })[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("property_inspections")
+    .select("*, property:properties(*)")
+    .eq("org_id", orgId)
+    .order("due_date", { ascending: false });
+  return (
+    (data as (PropertyInspection & { property: Property | null })[]) ?? []
+  );
+}
+
+/** All routine-inspection items in an org (used for scorecard issue counts). */
+export async function getInspectionItems(
+  orgId: string,
+): Promise<PropertyInspectionItem[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("property_inspection_items")
+    .select("*")
+    .eq("org_id", orgId);
+  return (data as PropertyInspectionItem[]) ?? [];
+}
+
+/** The single schedule for a property, if one exists. */
+export async function getInspectionSchedule(
+  orgId: string,
+  propertyId: string,
+): Promise<InspectionSchedule | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("inspection_schedules")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("property_id", propertyId)
+    .maybeSingle();
+  return (data as InspectionSchedule) ?? null;
+}
+
+export interface RoutineInspectionDetail {
+  inspection: PropertyInspection & { property: Property | null };
+  manager: Profile | null;
+  items: PropertyInspectionItem[];
+  media: PropertyInspectionMedia[];
+}
+
+export async function getRoutineInspectionDetail(
+  orgId: string,
+  id: string,
+): Promise<RoutineInspectionDetail | null> {
+  const supabase = await createClient();
+  const { data: inspection } = await supabase
+    .from("property_inspections")
+    .select("*, property:properties(*)")
+    .eq("org_id", orgId)
+    .eq("id", id)
+    .maybeSingle();
+  if (!inspection) return null;
+
+  const [{ data: items }, { data: media }] = await Promise.all([
+    supabase
+      .from("property_inspection_items")
+      .select("*")
+      .eq("inspection_id", id)
+      .order("created_at"),
+    supabase
+      .from("property_inspection_media")
+      .select("*")
+      .eq("inspection_id", id),
+  ]);
+
+  let manager: Profile | null = null;
+  const ins = inspection as PropertyInspection;
+  if (ins.manager_id) {
+    const { data: m } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", ins.manager_id)
+      .maybeSingle();
+    manager = (m as Profile) ?? null;
+  }
+
+  return {
+    inspection: inspection as PropertyInspection & { property: Property | null },
+    manager,
+    items: (items as PropertyInspectionItem[]) ?? [],
+    media: (media as PropertyInspectionMedia[]) ?? [],
   };
 }
