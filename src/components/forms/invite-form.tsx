@@ -20,7 +20,9 @@ export function InviteForm() {
       setError(result.error);
       return;
     }
-    setMessage("Invitation sent / member added.");
+    setMessage(
+      (result && "message" in result && result.message) || "Member added.",
+    );
     router.refresh();
   }
 
