@@ -3,9 +3,12 @@ import { notFound } from "next/navigation";
 import { requireOrgContext } from "@/lib/org";
 import { getRoutineInspectionDetail } from "@/lib/queries";
 import { routineInspectionStatus } from "@/lib/inspections-calc";
-import { CHECKLIST_LABELS } from "@/lib/inspection-checklist";
+import { CHECKLIST_LABELS, DEFAULT_CHECKLIST } from "@/lib/inspection-checklist";
 import { ITEM_RESULT_LABELS } from "@/lib/types";
-import { CompleteInspectionForm } from "@/components/forms/complete-inspection-form";
+import {
+  CompleteInspectionForm,
+  type ChecklistArea,
+} from "@/components/forms/complete-inspection-form";
 import { MediaGallery } from "@/components/media-gallery";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
@@ -26,9 +29,19 @@ export default async function InspectionDetailPage({
   const detail = await getRoutineInspectionDetail(ctx.org.id, id);
   if (!detail) notFound();
 
-  const { inspection, manager, items, media } = detail;
+  const { inspection, manager, items, media, templateItems } = detail;
   const now = new Date();
   const isComplete = !!inspection.completed_at;
+
+  // Checklist to fill in: the inspection's template, or the built-in default.
+  const areas: ChecklistArea[] =
+    templateItems.length > 0
+      ? templateItems.map((t) => ({ key: t.id, label: t.label, hint: t.hint }))
+      : DEFAULT_CHECKLIST.map((a) => ({
+          key: a.key,
+          label: a.label,
+          hint: a.hint,
+        }));
 
   return (
     <div>
@@ -54,7 +67,9 @@ export default async function InspectionDetailPage({
               <Card key={item.id}>
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold text-slate-900">
-                    {CHECKLIST_LABELS[item.area_key] ?? item.area_key}
+                    {item.area_label ??
+                      CHECKLIST_LABELS[item.area_key] ??
+                      item.area_key}
                   </h3>
                   <span
                     className={`text-sm font-semibold ${RESULT_STYLES[item.result]}`}
@@ -86,7 +101,11 @@ export default async function InspectionDetailPage({
             Walk the property and document each area below. A photo is required
             for every area unless you mark it N/A.
           </p>
-          <CompleteInspectionForm orgId={ctx.org.id} inspectionId={inspection.id} />
+          <CompleteInspectionForm
+            orgId={ctx.org.id}
+            inspectionId={inspection.id}
+            areas={areas}
+          />
         </>
       )}
     </div>

@@ -10,16 +10,17 @@ import {
 import { routineInspectionStatus } from "@/lib/inspections-calc";
 import { requireOrgContext } from "@/lib/org";
 import {
-  getInspectionSchedule,
+  getInspectionSchedules,
   getMembers,
   getProfileMap,
   getProperty,
   getRoutineInspections,
+  getTemplates,
   getVacancies,
 } from "@/lib/queries";
-import { InspectionScheduleForm } from "@/components/forms/inspection-schedule-form";
+import { PropertySchedules } from "@/components/forms/property-schedules";
 import { Card, PageHeader, StatCard, StatusBadge } from "@/components/ui";
-import { FREQUENCY_LABELS, STAGE_LABELS } from "@/lib/types";
+import { STAGE_LABELS } from "@/lib/types";
 import { formatCurrency, formatDate, formatDays } from "@/lib/utils";
 
 export default async function PropertyDetailPage({
@@ -29,15 +30,23 @@ export default async function PropertyDetailPage({
 }) {
   const { id } = await params;
   const ctx = await requireOrgContext();
-  const [property, allVacancies, profiles, schedule, members, allInspections] =
-    await Promise.all([
-      getProperty(ctx.org.id, id),
-      getVacancies(ctx.org.id),
-      getProfileMap(ctx.org.id),
-      getInspectionSchedule(ctx.org.id, id),
-      getMembers(ctx.org.id),
-      getRoutineInspections(ctx.org.id),
-    ]);
+  const [
+    property,
+    allVacancies,
+    profiles,
+    schedules,
+    members,
+    allInspections,
+    templates,
+  ] = await Promise.all([
+    getProperty(ctx.org.id, id),
+    getVacancies(ctx.org.id),
+    getProfileMap(ctx.org.id),
+    getInspectionSchedules(ctx.org.id, id),
+    getMembers(ctx.org.id),
+    getRoutineInspections(ctx.org.id),
+    getTemplates(ctx.org.id),
+  ]);
   if (!property) notFound();
 
   const now = new Date();
@@ -159,26 +168,31 @@ export default async function PropertyDetailPage({
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card>
           <h2 className="mb-1 text-lg font-semibold text-slate-900">
-            Inspection schedule
+            Inspection schedules
           </h2>
           <p className="mb-4 text-sm text-slate-500">
             Recurring condition checks for this property.
           </p>
           {isOwner ? (
-            <InspectionScheduleForm
+            <PropertySchedules
               propertyId={id}
               managers={managers}
-              schedule={schedule}
+              templates={templates}
+              schedules={schedules}
             />
-          ) : schedule ? (
-            <p className="text-sm text-slate-600">
-              {FREQUENCY_LABELS[schedule.frequency]} · next due{" "}
-              {formatDate(schedule.next_due_date)}
-              {schedule.active ? "" : " (paused)"}
-            </p>
+          ) : schedules.length > 0 ? (
+            <ul className="space-y-2 text-sm text-slate-600">
+              {schedules.map((s) => (
+                <li key={s.id}>
+                  {s.template?.name ?? "Inspection"} · next due{" "}
+                  {formatDate(s.next_due_date)}
+                  {s.active ? "" : " (paused)"}
+                </li>
+              ))}
+            </ul>
           ) : (
             <p className="text-sm text-slate-500">
-              No schedule set. Ask an owner to configure one.
+              No schedules set. Ask an owner to configure one.
             </p>
           )}
         </Card>

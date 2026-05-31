@@ -4,6 +4,8 @@ import type {
   Inspection,
   InspectionMedia,
   InspectionSchedule,
+  InspectionTemplate,
+  InspectionTemplateItem,
   OrgMember,
   Profile,
   Property,
@@ -165,19 +167,74 @@ export async function getInspectionItems(
   return (data as PropertyInspectionItem[]) ?? [];
 }
 
-/** The single schedule for a property, if one exists. */
-export async function getInspectionSchedule(
+/** All schedules for a property, with their template attached. */
+export async function getInspectionSchedules(
   orgId: string,
   propertyId: string,
-): Promise<InspectionSchedule | null> {
+): Promise<(InspectionSchedule & { template: InspectionTemplate | null })[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("inspection_schedules")
-    .select("*")
+    .select("*, template:inspection_templates(*)")
     .eq("org_id", orgId)
     .eq("property_id", propertyId)
+    .order("created_at");
+  return (
+    (data as (InspectionSchedule & {
+      template: InspectionTemplate | null;
+    })[]) ?? []
+  );
+}
+
+/** All inspection templates in an org. */
+export async function getTemplates(
+  orgId: string,
+): Promise<InspectionTemplate[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("inspection_templates")
+    .select("*")
+    .eq("org_id", orgId)
+    .order("created_at");
+  return (data as InspectionTemplate[]) ?? [];
+}
+
+/** Templates with their checklist items, ordered. */
+export async function getTemplatesWithItems(
+  orgId: string,
+): Promise<(InspectionTemplate & { items: InspectionTemplateItem[] })[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("inspection_templates")
+    .select("*, items:inspection_template_items(*)")
+    .eq("org_id", orgId)
+    .order("created_at");
+  const templates =
+    (data as (InspectionTemplate & { items: InspectionTemplateItem[] })[]) ?? [];
+  for (const t of templates) {
+    t.items.sort((a, b) => a.position - b.position);
+  }
+  return templates;
+}
+
+/** A single template with its items. */
+export async function getTemplate(
+  orgId: string,
+  id: string,
+): Promise<(InspectionTemplate & { items: InspectionTemplateItem[] }) | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("inspection_templates")
+    .select("*, items:inspection_template_items(*)")
+    .eq("org_id", orgId)
+    .eq("id", id)
     .maybeSingle();
-  return (data as InspectionSchedule) ?? null;
+  if (!data) return null;
+  const template = data as InspectionTemplate & {
+    items: InspectionTemplateItem[];
+  };
+  template.items.sort((a, b) => a.position - b.position);
+  return template;
 }
 
 export interface RoutineInspectionDetail {
@@ -185,6 +242,8 @@ export interface RoutineInspectionDetail {
   manager: Profile | null;
   items: PropertyInspectionItem[];
   media: PropertyInspectionMedia[];
+  /** Checklist areas to fill in (from the inspection's template, if any). */
+  templateItems: InspectionTemplateItem[];
 }
 
 export async function getRoutineInspectionDetail(
@@ -212,8 +271,9 @@ export async function getRoutineInspectionDetail(
       .eq("inspection_id", id),
   ]);
 
-  let manager: Profile | null = null;
   const ins = inspection as PropertyInspection;
+
+  let manager: Profile | null = null;
   if (ins.manager_id) {
     const { data: m } = await supabase
       .from("profiles")
@@ -223,10 +283,21 @@ export async function getRoutineInspectionDetail(
     manager = (m as Profile) ?? null;
   }
 
+  let templateItems: InspectionTemplateItem[] = [];
+  if (ins.template_id) {
+    const { data: ti } = await supabase
+      .from("inspection_template_items")
+      .select("*")
+      .eq("template_id", ins.template_id)
+      .order("position");
+    templateItems = (ti as InspectionTemplateItem[]) ?? [];
+  }
+
   return {
     inspection: inspection as PropertyInspection & { property: Property | null },
     manager,
     items: (items as PropertyInspectionItem[]) ?? [],
     media: (media as PropertyInspectionMedia[]) ?? [],
+    templateItems,
   };
 }

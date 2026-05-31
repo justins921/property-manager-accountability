@@ -187,10 +187,32 @@ export type InspectionFrequency =
 
 export type InspectionItemResult = "pass" | "needs_attention" | "na";
 
+export interface InspectionTemplate {
+  id: string;
+  org_id: string;
+  name: string;
+  frequency: InspectionFrequency;
+  description: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InspectionTemplateItem {
+  id: string;
+  template_id: string;
+  org_id: string;
+  label: string;
+  hint: string | null;
+  position: number;
+  created_at: string;
+}
+
 export interface InspectionSchedule {
   id: string;
   org_id: string;
   property_id: string;
+  template_id: string | null;
   manager_id: string | null;
   frequency: InspectionFrequency;
   anchor_date: string;
@@ -206,6 +228,7 @@ export interface PropertyInspection {
   org_id: string;
   property_id: string;
   schedule_id: string | null;
+  template_id: string | null;
   manager_id: string | null;
   due_date: string;
   completed_at: string | null;
@@ -219,6 +242,7 @@ export interface PropertyInspectionItem {
   org_id: string;
   inspection_id: string;
   area_key: string;
+  area_label: string | null;
   result: InspectionItemResult;
   notes: string | null;
   created_at: string;

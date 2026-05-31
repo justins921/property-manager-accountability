@@ -45,7 +45,9 @@ This creates all tables, enums, RLS policies, triggers, and the private
 
 Then run [`supabase/routine-inspections.sql`](supabase/routine-inspections.sql)
 to add the routine property-inspection pillar (schedules, inspections, the
-`property-media` bucket). It's additive and idempotent.
+`property-media` bucket), followed by
+[`supabase/inspection-templates.sql`](supabase/inspection-templates.sql) for
+customizable, reusable checklist templates. Both are additive and idempotent.
 
 > By default Supabase requires email confirmation. For the smoothest local dev
 > you can disable it under **Authentication → Providers → Email**.

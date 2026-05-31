@@ -4,15 +4,23 @@ import {
   routineInspectionStatus,
 } from "@/lib/inspections-calc";
 import { requireOrgContext } from "@/lib/org";
-import { getProfileMap, getRoutineInspections } from "@/lib/queries";
+import {
+  getProfileMap,
+  getProperties,
+  getRoutineInspections,
+  getTemplates,
+} from "@/lib/queries";
+import { StartInspectionButton } from "@/components/forms/start-inspection-button";
 import { EmptyState, PageHeader, StatusBadge } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
 
 export default async function InspectionsPage() {
   const ctx = await requireOrgContext();
-  const [inspections, profiles] = await Promise.all([
+  const [inspections, profiles, properties, templates] = await Promise.all([
     getRoutineInspections(ctx.org.id),
     getProfileMap(ctx.org.id),
+    getProperties(ctx.org.id),
+    getTemplates(ctx.org.id),
   ]);
   const now = new Date();
 
@@ -29,6 +37,17 @@ export default async function InspectionsPage() {
       <PageHeader
         title="Routine Inspections"
         description="Recurring property condition checks — proof of upkeep on a schedule"
+        action={
+          <div className="flex items-center gap-3">
+            <Link
+              href="/inspections/templates"
+              className="text-sm font-semibold text-brand-600 hover:text-brand-700"
+            >
+              Templates
+            </Link>
+            <StartInspectionButton properties={properties} templates={templates} />
+          </div>
+        }
       />
 
       {inspections.length === 0 ? (

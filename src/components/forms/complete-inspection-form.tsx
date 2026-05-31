@@ -3,11 +3,16 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { completeInspection } from "@/app/actions/inspections-routine";
-import { DEFAULT_CHECKLIST } from "@/lib/inspection-checklist";
 import { createClient } from "@/lib/supabase/client";
 import { ITEM_RESULT_LABELS, type InspectionItemResult } from "@/lib/types";
 
 const BUCKET = "property-media";
+
+export interface ChecklistArea {
+  key: string;
+  label: string;
+  hint?: string | null;
+}
 
 interface AreaState {
   result: InspectionItemResult;
@@ -18,14 +23,16 @@ interface AreaState {
 export function CompleteInspectionForm({
   orgId,
   inspectionId,
+  areas,
 }: {
   orgId: string;
   inspectionId: string;
+  areas: ChecklistArea[];
 }) {
   const router = useRouter();
   const [state, setState] = useState<Record<string, AreaState>>(() =>
     Object.fromEntries(
-      DEFAULT_CHECKLIST.map((a) => [
+      areas.map((a) => [
         a.key,
         { result: "pass" as InspectionItemResult, notes: "", files: [] },
       ]),
@@ -47,12 +54,13 @@ export function CompleteInspectionForm({
 
     try {
       const items = [];
-      for (const area of DEFAULT_CHECKLIST) {
+      for (const area of areas) {
         const a = state[area.key];
 
-        // Require a photo unless the area is marked N/A.
         if (a.result !== "na" && a.files.length === 0) {
-          throw new Error(`Add at least one photo for "${area.label}" (or mark it N/A).`);
+          throw new Error(
+            `Add at least one photo for "${area.label}" (or mark it N/A).`,
+          );
         }
 
         const media = [];
@@ -68,6 +76,7 @@ export function CompleteInspectionForm({
 
         items.push({
           area_key: area.key,
+          area_label: area.label,
           result: a.result,
           notes: a.notes,
           media,
@@ -90,7 +99,7 @@ export function CompleteInspectionForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      {DEFAULT_CHECKLIST.map((area) => {
+      {areas.map((area) => {
         const a = state[area.key];
         return (
           <div key={area.key} className="card p-5">

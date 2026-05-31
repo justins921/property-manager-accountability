@@ -6,29 +6,24 @@ import { z } from "zod";
 import { firstDueOnOrAfter } from "@/lib/inspections-calc";
 import { requireOrgContext } from "@/lib/org";
 import { createClient } from "@/lib/supabase/server";
-import type { InspectionFrequency, InspectionItemResult } from "@/lib/types";
-
-const FREQUENCIES = [
-  "weekly",
-  "monthly",
-  "quarterly",
-  "semiannual",
-  "annual",
-] as const;
+import type {
+  InspectionFrequency,
+  InspectionItemResult,
+} from "@/lib/types";
 
 const scheduleSchema = z.object({
   property_id: z.string().uuid(),
+  template_id: z.string().uuid(),
   manager_id: z.string().uuid().optional().or(z.literal("")),
-  frequency: z.enum(FREQUENCIES),
   anchor_date: z.string().min(1),
   active: z.union([z.literal("on"), z.literal("")]).optional(),
 });
 
 /**
- * Create or update the recurring inspection schedule for a property (owner
- * only). Recomputes the next due date from the anchor + cadence.
+ * Add (or update) a schedule that applies a template to a property on its
+ * cadence. A property can have several schedules — one per template. Owner only.
  */
-export async function upsertSchedule(formData: FormData) {
+export async function addSchedule(formData: FormData) {
   const ctx = await requireOrgContext();
   if (ctx.role !== "owner") {
     return { error: "Only owners can manage inspection schedules." };
@@ -38,19 +33,31 @@ export async function upsertSchedule(formData: FormData) {
   if (!parsed.success) {
     return { error: parsed.error.errors[0]?.message ?? "Invalid input." };
   }
-  const { property_id, manager_id, frequency, anchor_date, active } =
+  const { property_id, template_id, manager_id, anchor_date, active } =
     parsed.data;
 
+  const supabase = await createClient();
+
+  // The cadence comes from the chosen template.
+  const { data: template } = await supabase
+    .from("inspection_templates")
+    .select("frequency")
+    .eq("org_id", ctx.org.id)
+    .eq("id", template_id)
+    .maybeSingle();
+  if (!template) return { error: "Template not found." };
+
+  const frequency = template.frequency as InspectionFrequency;
   const nextDue = format(
-    firstDueOnOrAfter(anchor_date, frequency as InspectionFrequency),
+    firstDueOnOrAfter(anchor_date, frequency),
     "yyyy-MM-dd",
   );
 
-  const supabase = await createClient();
   const { error } = await supabase.from("inspection_schedules").upsert(
     {
       org_id: ctx.org.id,
       property_id,
+      template_id,
       manager_id: manager_id || null,
       frequency,
       anchor_date,
@@ -58,7 +65,7 @@ export async function upsertSchedule(formData: FormData) {
       active: active === "on",
       created_by: ctx.userId,
     },
-    { onConflict: "property_id" },
+    { onConflict: "property_id,template_id" },
   );
 
   if (error) return { error: error.message };
@@ -67,20 +74,37 @@ export async function upsertSchedule(formData: FormData) {
   return { ok: true };
 }
 
+export async function removeSchedule(scheduleId: string, propertyId: string) {
+  const ctx = await requireOrgContext();
+  if (ctx.role !== "owner") {
+    return { error: "Only owners can manage inspection schedules." };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("inspection_schedules")
+    .delete()
+    .eq("org_id", ctx.org.id)
+    .eq("id", scheduleId);
+  if (error) return { error: error.message };
+  revalidatePath(`/properties/${propertyId}`);
+  return { ok: true };
+}
+
 const adhocSchema = z.object({
   property_id: z.string().uuid(),
+  template_id: z.string().uuid(),
   manager_id: z.string().uuid().optional().or(z.literal("")),
   due_date: z.string().optional(),
 });
 
-/** Create a one-off routine inspection due now (or on a given date). */
+/** Create a one-off inspection from a template, due now (or on a given date). */
 export async function createAdHocInspection(formData: FormData) {
   const ctx = await requireOrgContext();
   const parsed = adhocSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { error: parsed.error.errors[0]?.message ?? "Invalid input." };
   }
-  const { property_id, manager_id, due_date } = parsed.data;
+  const { property_id, template_id, manager_id, due_date } = parsed.data;
 
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -88,6 +112,7 @@ export async function createAdHocInspection(formData: FormData) {
     .insert({
       org_id: ctx.org.id,
       property_id,
+      template_id,
       manager_id: manager_id || null,
       due_date: due_date || format(new Date(), "yyyy-MM-dd"),
     })
@@ -98,20 +123,23 @@ export async function createAdHocInspection(formData: FormData) {
     return { error: error?.message ?? "Could not create inspection." };
   }
   revalidatePath("/inspections");
+  revalidatePath(`/properties/${property_id}`);
   return { ok: true, id: data.id };
 }
 
 interface ItemInput {
   area_key: string;
+  area_label: string;
   result: InspectionItemResult;
   notes?: string;
   media: { storage_path: string; caption?: string }[];
 }
 
 /**
- * Record a completed routine inspection: writes one row per checklist item,
- * attaches the uploaded photos, and stamps the inspection complete. Re-running
- * replaces prior items/media so a re-submit is idempotent.
+ * Record a completed routine inspection: writes one row per checklist item
+ * (snapshotting the label), attaches the uploaded photos, and stamps the
+ * inspection complete. Re-running replaces prior items/media so a re-submit is
+ * idempotent.
  */
 export async function completeInspection(params: {
   inspection_id: string;
@@ -121,7 +149,6 @@ export async function completeInspection(params: {
   const ctx = await requireOrgContext();
   const supabase = await createClient();
 
-  // Verify the inspection belongs to this org.
   const { data: existing } = await supabase
     .from("property_inspections")
     .select("id")
@@ -130,7 +157,6 @@ export async function completeInspection(params: {
     .maybeSingle();
   if (!existing) return { error: "Inspection not found." };
 
-  // Clear any prior items (media cascades) so completion is idempotent.
   await supabase
     .from("property_inspection_items")
     .delete()
@@ -143,6 +169,7 @@ export async function completeInspection(params: {
         org_id: ctx.org.id,
         inspection_id: params.inspection_id,
         area_key: item.area_key,
+        area_label: item.area_label,
         result: item.result,
         notes: item.notes || null,
       })
