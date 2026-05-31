@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireOrgContext } from "@/lib/org";
+import { ADMIN_VIEW_READONLY, requireOrgContext } from "@/lib/org";
 import { DEFAULT_CHECKLIST } from "@/lib/inspection-checklist";
 import { createClient } from "@/lib/supabase/server";
 import type { InspectionFrequency } from "@/lib/types";
@@ -44,6 +44,7 @@ async function writeItems(
 /** Create a reusable checklist template (owner only). */
 export async function createTemplate(input: TemplateInput) {
   const ctx = await requireOrgContext();
+  if (ctx.isAdminView) return { error: ADMIN_VIEW_READONLY };
   if (ctx.role !== "owner") {
     return { error: "Only owners can manage templates." };
   }
@@ -78,6 +79,7 @@ export async function createTemplate(input: TemplateInput) {
 /** Update a template's details and replace its items (owner only). */
 export async function updateTemplate(input: TemplateInput & { id: string }) {
   const ctx = await requireOrgContext();
+  if (ctx.isAdminView) return { error: ADMIN_VIEW_READONLY };
   if (ctx.role !== "owner") {
     return { error: "Only owners can manage templates." };
   }
@@ -109,6 +111,7 @@ export async function updateTemplate(input: TemplateInput & { id: string }) {
 
 export async function deleteTemplate(id: string) {
   const ctx = await requireOrgContext();
+  if (ctx.isAdminView) return { error: ADMIN_VIEW_READONLY };
   if (ctx.role !== "owner") {
     return { error: "Only owners can manage templates." };
   }

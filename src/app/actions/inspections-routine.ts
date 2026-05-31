@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { firstDueOnOrAfter } from "@/lib/inspections-calc";
-import { requireOrgContext } from "@/lib/org";
+import { ADMIN_VIEW_READONLY, requireOrgContext } from "@/lib/org";
 import { createClient } from "@/lib/supabase/server";
 import type {
   InspectionFrequency,
@@ -25,6 +25,7 @@ const scheduleSchema = z.object({
  */
 export async function addSchedule(formData: FormData) {
   const ctx = await requireOrgContext();
+  if (ctx.isAdminView) return { error: ADMIN_VIEW_READONLY };
   if (ctx.role !== "owner") {
     return { error: "Only owners can manage inspection schedules." };
   }
@@ -76,6 +77,7 @@ export async function addSchedule(formData: FormData) {
 
 export async function removeSchedule(scheduleId: string, propertyId: string) {
   const ctx = await requireOrgContext();
+  if (ctx.isAdminView) return { error: ADMIN_VIEW_READONLY };
   if (ctx.role !== "owner") {
     return { error: "Only owners can manage inspection schedules." };
   }
@@ -100,6 +102,7 @@ const adhocSchema = z.object({
 /** Create a one-off inspection from a template, due now (or on a given date). */
 export async function createAdHocInspection(formData: FormData) {
   const ctx = await requireOrgContext();
+  if (ctx.isAdminView) return { error: ADMIN_VIEW_READONLY };
   const parsed = adhocSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { error: parsed.error.errors[0]?.message ?? "Invalid input." };
@@ -147,6 +150,7 @@ export async function completeInspection(params: {
   items: ItemInput[];
 }) {
   const ctx = await requireOrgContext();
+  if (ctx.isAdminView) return { error: ADMIN_VIEW_READONLY };
   const supabase = await createClient();
 
   const { data: existing } = await supabase

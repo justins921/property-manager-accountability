@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireOrgContext } from "@/lib/org";
+import { ADMIN_VIEW_READONLY, requireOrgContext } from "@/lib/org";
 import { createClient } from "@/lib/supabase/server";
 
 const schema = z.object({
@@ -13,6 +13,7 @@ const schema = z.object({
 
 export async function createProperty(formData: FormData) {
   const ctx = await requireOrgContext();
+  if (ctx.isAdminView) return { error: ADMIN_VIEW_READONLY };
   const parsed = schema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { error: parsed.error.errors[0]?.message ?? "Invalid input." };

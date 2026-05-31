@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireOrgContext } from "@/lib/org";
+import { ADMIN_VIEW_READONLY, requireOrgContext } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -27,6 +27,7 @@ const schema = z.object({
  */
 export async function inviteManager(formData: FormData) {
   const ctx = await requireOrgContext();
+  if (ctx.isAdminView) return { error: ADMIN_VIEW_READONLY };
   if (ctx.role !== "owner") {
     return { error: "Only owners can invite team members." };
   }

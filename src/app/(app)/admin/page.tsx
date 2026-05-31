@@ -1,6 +1,6 @@
-import Link from "next/link";
+import { startViewingOrg } from "@/app/actions/admin-view";
 import { adminListOrganizations, requirePlatformAdmin } from "@/lib/admin";
-import { Badge, EmptyState, PageHeader } from "@/components/ui";
+import { EmptyState, PageHeader } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
 
 export default async function AdminPage() {
@@ -11,12 +11,13 @@ export default async function AdminPage() {
     <div>
       <PageHeader
         title="Platform Admin"
-        description="Every organization on the platform · read-only operator view"
+        description="Every organization on the platform · operator view"
       />
 
       <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        You&rsquo;re viewing platform-wide data as an operator. This is read-only
-        and crosses tenant boundaries — handle customer data with care.
+        &ldquo;View as&rdquo; opens a customer&rsquo;s account in read-only mode —
+        you can browse every page they see, but changes are disabled. A banner
+        stays up while you&rsquo;re viewing, with an exit button.
       </div>
 
       {orgs.length === 0 ? (
@@ -51,12 +52,15 @@ export default async function AdminPage() {
                     {formatDate(o.org.created_at.slice(0, 10))}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Link
-                      href={`/admin/orgs/${o.org.id}`}
-                      className="font-semibold text-brand-600 hover:text-brand-700"
-                    >
-                      Dashboard →
-                    </Link>
+                    <form action={startViewingOrg}>
+                      <input type="hidden" name="org_id" value={o.org.id} />
+                      <button
+                        type="submit"
+                        className="font-semibold text-brand-600 hover:text-brand-700"
+                      >
+                        View as →
+                      </button>
+                    </form>
                   </td>
                 </tr>
               ))}

@@ -1,4 +1,4 @@
-import { createClient } from "./supabase/server";
+import { getReadClient } from "./data-client";
 import type {
   DelayExplanation,
   Inspection,
@@ -20,7 +20,7 @@ import type {
 export async function getVacancies(
   orgId: string,
 ): Promise<(Vacancy & { property: Property | null })[]> {
-  const supabase = await createClient();
+  const supabase = await getReadClient();
   const { data } = await supabase
     .from("vacancies")
     .select("*, property:properties(*)")
@@ -30,7 +30,7 @@ export async function getVacancies(
 }
 
 export async function getProperties(orgId: string): Promise<Property[]> {
-  const supabase = await createClient();
+  const supabase = await getReadClient();
   const { data } = await supabase
     .from("properties")
     .select("*")
@@ -43,7 +43,7 @@ export async function getProperty(
   orgId: string,
   id: string,
 ): Promise<Property | null> {
-  const supabase = await createClient();
+  const supabase = await getReadClient();
   const { data } = await supabase
     .from("properties")
     .select("*")
@@ -55,7 +55,7 @@ export async function getProperty(
 
 /** Members of an org with their profile (name/email) attached. */
 export async function getMembers(orgId: string): Promise<OrgMember[]> {
-  const supabase = await createClient();
+  const supabase = await getReadClient();
   const { data } = await supabase
     .from("org_members")
     .select("*, profile:profiles(*)")
@@ -88,7 +88,7 @@ export async function getVacancyDetail(
   orgId: string,
   id: string,
 ): Promise<VacancyDetail | null> {
-  const supabase = await createClient();
+  const supabase = await getReadClient();
   const { data: vacancy } = await supabase
     .from("vacancies")
     .select("*, property:properties(*)")
@@ -144,7 +144,7 @@ export async function getVacancyDetail(
 export async function getRoutineInspections(
   orgId: string,
 ): Promise<(PropertyInspection & { property: Property | null })[]> {
-  const supabase = await createClient();
+  const supabase = await getReadClient();
   const { data } = await supabase
     .from("property_inspections")
     .select("*, property:properties(*)")
@@ -159,7 +159,7 @@ export async function getRoutineInspections(
 export async function getInspectionItems(
   orgId: string,
 ): Promise<PropertyInspectionItem[]> {
-  const supabase = await createClient();
+  const supabase = await getReadClient();
   const { data } = await supabase
     .from("property_inspection_items")
     .select("*")
@@ -172,7 +172,7 @@ export async function getInspectionSchedules(
   orgId: string,
   propertyId: string,
 ): Promise<(InspectionSchedule & { template: InspectionTemplate | null })[]> {
-  const supabase = await createClient();
+  const supabase = await getReadClient();
   const { data } = await supabase
     .from("inspection_schedules")
     .select("*, template:inspection_templates(*)")
@@ -190,7 +190,7 @@ export async function getInspectionSchedules(
 export async function getTemplates(
   orgId: string,
 ): Promise<InspectionTemplate[]> {
-  const supabase = await createClient();
+  const supabase = await getReadClient();
   const { data } = await supabase
     .from("inspection_templates")
     .select("*")
@@ -203,7 +203,7 @@ export async function getTemplates(
 export async function getTemplatesWithItems(
   orgId: string,
 ): Promise<(InspectionTemplate & { items: InspectionTemplateItem[] })[]> {
-  const supabase = await createClient();
+  const supabase = await getReadClient();
   const { data } = await supabase
     .from("inspection_templates")
     .select("*, items:inspection_template_items(*)")
@@ -222,7 +222,7 @@ export async function getTemplate(
   orgId: string,
   id: string,
 ): Promise<(InspectionTemplate & { items: InspectionTemplateItem[] }) | null> {
-  const supabase = await createClient();
+  const supabase = await getReadClient();
   const { data } = await supabase
     .from("inspection_templates")
     .select("*, items:inspection_template_items(*)")
@@ -250,7 +250,7 @@ export async function getRoutineInspectionDetail(
   orgId: string,
   id: string,
 ): Promise<RoutineInspectionDetail | null> {
-  const supabase = await createClient();
+  const supabase = await getReadClient();
   const { data: inspection } = await supabase
     .from("property_inspections")
     .select("*, property:properties(*)")

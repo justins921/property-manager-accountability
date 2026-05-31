@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { deriveStageFromDates, stageRank } from "@/lib/calculations";
-import { requireOrgContext } from "@/lib/org";
+import { ADMIN_VIEW_READONLY, requireOrgContext } from "@/lib/org";
 import { createClient } from "@/lib/supabase/server";
 import type {
   DeadlineType,
@@ -30,6 +30,7 @@ const createSchema = z.object({
 
 export async function createVacancy(formData: FormData) {
   const ctx = await requireOrgContext();
+  if (ctx.isAdminView) return { error: ADMIN_VIEW_READONLY };
   const parsed = createSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { error: parsed.error.errors[0]?.message ?? "Invalid input." };
@@ -75,6 +76,7 @@ const ACTUAL_FIELDS = [
 /** Record actual milestone dates (Step 7) and advance the lifecycle stage. */
 export async function updateVacancyDates(formData: FormData) {
   const ctx = await requireOrgContext();
+  if (ctx.isAdminView) return { error: ADMIN_VIEW_READONLY };
   const id = String(formData.get("vacancy_id"));
 
   const supabase = await createClient();
@@ -140,6 +142,7 @@ const delaySchema = z.object({
 
 export async function addDelayExplanation(formData: FormData) {
   const ctx = await requireOrgContext();
+  if (ctx.isAdminView) return { error: ADMIN_VIEW_READONLY };
   const parsed = delaySchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { error: parsed.error.errors[0]?.message ?? "Invalid input." };
@@ -180,6 +183,7 @@ export async function createInspection(params: {
   media: MediaInput[];
 }) {
   const ctx = await requireOrgContext();
+  if (ctx.isAdminView) return { error: ADMIN_VIEW_READONLY };
   const supabase = await createClient();
 
   const { data: inspection, error } = await supabase

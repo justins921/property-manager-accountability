@@ -8,16 +8,9 @@
 // ============================================================================
 
 import { redirect } from "next/navigation";
-import { buildInspectionScorecard } from "./inspections-calc";
 import { createAdminClient } from "./supabase/admin";
 import { createClient } from "./supabase/server";
-import type {
-  Organization,
-  Profile,
-  PropertyInspection,
-  PropertyInspectionItem,
-  Vacancy,
-} from "./types";
+import type { Organization, PropertyInspection, Vacancy } from "./types";
 
 /** Is this email on the platform-admin allowlist? Secure default: no. */
 export function isPlatformAdmin(email: string | null | undefined): boolean {
@@ -97,72 +90,3 @@ export async function adminListOrganizations(): Promise<OrgSummary[]> {
     openInspections: inspectionCounts.get(org.id) ?? 0,
   }));
 }
-
-export interface AdminOrgData {
-  org: Organization;
-  vacancies: (Vacancy & { property: { name: string } | null })[];
-  inspections: (PropertyInspection & { property: { name: string } | null })[];
-  inspectionItems: PropertyInspectionItem[];
-  profiles: Map<string, Profile>;
-}
-
-/** Full read-only dataset for one organization's dashboard. */
-export async function adminGetOrgData(
-  orgId: string,
-): Promise<AdminOrgData | null> {
-  const db = createAdminClient();
-
-  const { data: org } = await db
-    .from("organizations")
-    .select("*")
-    .eq("id", orgId)
-    .maybeSingle();
-  if (!org) return null;
-
-  const [
-    { data: vacancies },
-    { data: inspections },
-    { data: items },
-    { data: members },
-  ] = await Promise.all([
-    db
-      .from("vacancies")
-      .select("*, property:properties(name)")
-      .eq("org_id", orgId)
-      .order("created_at", { ascending: false }),
-    db
-      .from("property_inspections")
-      .select("*, property:properties(name)")
-      .eq("org_id", orgId)
-      .order("due_date", { ascending: false }),
-    db.from("property_inspection_items").select("*").eq("org_id", orgId),
-    db
-      .from("org_members")
-      .select("user_id, profile:profiles(*)")
-      .eq("org_id", orgId),
-  ]);
-
-  const profiles = new Map<string, Profile>();
-  for (const m of (members ?? []) as unknown as {
-    user_id: string;
-    profile: Profile | Profile[] | null;
-  }[]) {
-    const p = Array.isArray(m.profile) ? m.profile[0] : m.profile;
-    if (p) profiles.set(m.user_id, p);
-  }
-
-  return {
-    org: org as Organization,
-    vacancies:
-      (vacancies as (Vacancy & { property: { name: string } | null })[]) ?? [],
-    inspections:
-      (inspections as (PropertyInspection & {
-        property: { name: string } | null;
-      })[]) ?? [],
-    inspectionItems: (items as PropertyInspectionItem[]) ?? [],
-    profiles,
-  };
-}
-
-// Re-export so the admin dashboard page can reuse the scorecard rollup.
-export { buildInspectionScorecard };
