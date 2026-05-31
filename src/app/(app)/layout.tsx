@@ -1,4 +1,5 @@
 import { requireOrgContext } from "@/lib/org";
+import { isPlatformAdmin } from "@/lib/admin";
 import { Sidebar } from "@/components/sidebar";
 
 export default async function AppLayout({
@@ -14,6 +15,7 @@ export default async function AppLayout({
         orgName={ctx.org.name}
         userName={ctx.fullName || ctx.email}
         role={ctx.role}
+        isAdmin={isPlatformAdmin(ctx.email)}
       />
       <main className="flex-1 overflow-y-auto bg-slate-50 px-8 py-8">
         <div className="mx-auto max-w-6xl">{children}</div>

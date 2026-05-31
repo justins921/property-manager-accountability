@@ -8,6 +8,7 @@ import {
   ClipboardList,
   Gauge,
   LogOut,
+  Shield,
   Trophy,
   Users,
 } from "lucide-react";
@@ -28,10 +29,12 @@ export function Sidebar({
   orgName,
   userName,
   role,
+  isAdmin = false,
 }: {
   orgName: string;
   userName: string;
   role: MemberRole;
+  isAdmin?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -75,6 +78,21 @@ export function Sidebar({
             </Link>
           );
         })}
+
+        {isAdmin ? (
+          <Link
+            href="/admin"
+            className={cn(
+              "mt-2 flex items-center gap-3 rounded-lg border-t border-slate-100 px-3 pb-2 pt-4 text-sm font-medium transition",
+              pathname.startsWith("/admin")
+                ? "text-brand-700"
+                : "text-slate-600 hover:text-slate-900",
+            )}
+          >
+            <Shield className="h-4 w-4" />
+            Platform Admin
+          </Link>
+        ) : null}
       </nav>
 
       <div className="border-t border-slate-100 px-3 py-4">
