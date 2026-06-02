@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { ADMIN_VIEW_READONLY, requireOrgContext } from "@/lib/org";
 import { DEFAULT_CHECKLIST } from "@/lib/inspection-checklist";
+import { STARTER_TEMPLATES, getStarter } from "@/lib/starter-templates";
 import { createClient } from "@/lib/supabase/server";
 import type { InspectionFrequency, TemplateCategory } from "@/lib/types";
 
@@ -152,4 +153,47 @@ export async function seedDefaultTemplate() {
     description: "A good starting point — edit the items to fit your portfolio.",
     items: DEFAULT_CHECKLIST.map((a) => ({ label: a.label, hint: a.hint })),
   });
+}
+
+/** Create a template from one of the pre-built starter checklists. */
+export async function createStarterTemplate(key: string) {
+  const starter = getStarter(key);
+  if (!starter) return { error: "Unknown starter template." };
+  return createTemplate({
+    name: starter.name,
+    frequency: starter.frequency,
+    category: starter.category,
+    description: starter.description,
+    items: starter.items.map((i) => ({
+      label: i.label,
+      hint: i.hint,
+      photo_required: i.photo_required,
+      min_photos: i.min_photos,
+    })),
+  });
+}
+
+/** Create every starter template that doesn't already exist (by name). */
+export async function seedRecommendedStarters() {
+  const ctx = await requireOrgContext();
+  if (ctx.isAdminView) return { error: ADMIN_VIEW_READONLY };
+  if (ctx.role !== "owner") {
+    return { error: "Only owners can manage templates." };
+  }
+
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("inspection_templates")
+    .select("name")
+    .eq("org_id", ctx.org.id);
+  const have = new Set((existing ?? []).map((t) => (t.name as string).trim()));
+
+  let created = 0;
+  for (const starter of STARTER_TEMPLATES) {
+    if (have.has(starter.name)) continue;
+    const result = await createStarterTemplate(starter.key);
+    if ("error" in result && result.error) return result;
+    created += 1;
+  }
+  return { ok: true, created };
 }

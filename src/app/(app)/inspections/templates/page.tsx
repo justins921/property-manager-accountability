@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireOrgContext } from "@/lib/org";
 import { getTemplatesWithItems } from "@/lib/queries";
-import { SeedTemplateButton } from "@/components/forms/seed-template-button";
+import { StarterTemplates } from "@/components/forms/starter-templates";
 import { Badge, EmptyState, LinkButton, PageHeader } from "@/components/ui";
 import { CATEGORY_LABELS, FREQUENCY_LABELS } from "@/lib/types";
 
@@ -23,12 +23,9 @@ export default async function TemplatesPage() {
         description="Reusable checklists, each tied to a cadence — apply them to any property"
         action={
           isOwner ? (
-            <div className="flex gap-2">
-              <SeedTemplateButton />
-              <LinkButton href="/inspections/templates/new">
-                + New template
-              </LinkButton>
-            </div>
+            <LinkButton href="/inspections/templates/new">
+              + New template
+            </LinkButton>
           ) : null
         }
       />
@@ -37,17 +34,22 @@ export default async function TemplatesPage() {
         <Link href="/inspections">← Back to inspections</Link>
       </p>
 
+      {isOwner ? <StarterTemplates /> : null}
+
       {templates.length === 0 ? (
         <EmptyState
-          title="No templates yet"
+          title="No templates of your own yet"
           description={
             isOwner
-              ? "Create a checklist template (e.g. a quick monthly drive-by and a thorough annual review), then apply it to your properties from each property's page."
+              ? "Add a starter above, or build your own from scratch with “New template”."
               : "An owner hasn't created any inspection templates yet."
           }
-          action={isOwner ? <SeedTemplateButton /> : undefined}
         />
       ) : (
+        <>
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Your templates
+          </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {templates.map((t) => {
             const inner = (
@@ -84,7 +86,8 @@ export default async function TemplatesPage() {
               </div>
             );
           })}
-        </div>
+          </div>
+        </>
       )}
     </div>
   );
