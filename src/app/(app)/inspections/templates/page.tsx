@@ -3,7 +3,13 @@ import { requireOrgContext } from "@/lib/org";
 import { getTemplatesWithItems } from "@/lib/queries";
 import { SeedTemplateButton } from "@/components/forms/seed-template-button";
 import { Badge, EmptyState, LinkButton, PageHeader } from "@/components/ui";
-import { FREQUENCY_LABELS } from "@/lib/types";
+import { CATEGORY_LABELS, FREQUENCY_LABELS } from "@/lib/types";
+
+const CATEGORY_BADGE: Record<string, string> = {
+  interior: "bg-violet-50 text-violet-700",
+  exterior: "bg-emerald-50 text-emerald-700",
+  general: "bg-slate-100 text-slate-600",
+};
 
 export default async function TemplatesPage() {
   const ctx = await requireOrgContext();
@@ -48,7 +54,12 @@ export default async function TemplatesPage() {
               <>
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="font-semibold text-slate-900">{t.name}</h3>
-                  <Badge>{FREQUENCY_LABELS[t.frequency]}</Badge>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <Badge className={CATEGORY_BADGE[t.category]}>
+                      {CATEGORY_LABELS[t.category]}
+                    </Badge>
+                    <Badge>{FREQUENCY_LABELS[t.frequency]}</Badge>
+                  </div>
                 </div>
                 {t.description ? (
                   <p className="mt-1 text-sm text-slate-500">{t.description}</p>

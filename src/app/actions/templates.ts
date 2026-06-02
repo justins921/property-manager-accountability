@@ -4,16 +4,19 @@ import { revalidatePath } from "next/cache";
 import { ADMIN_VIEW_READONLY, requireOrgContext } from "@/lib/org";
 import { DEFAULT_CHECKLIST } from "@/lib/inspection-checklist";
 import { createClient } from "@/lib/supabase/server";
-import type { InspectionFrequency } from "@/lib/types";
+import type { InspectionFrequency, TemplateCategory } from "@/lib/types";
 
 interface TemplateItemInput {
   label: string;
   hint?: string;
+  photo_required?: boolean;
+  min_photos?: number;
 }
 
 interface TemplateInput {
   name: string;
   frequency: InspectionFrequency;
+  category: TemplateCategory;
   description?: string;
   items: TemplateItemInput[];
 }
@@ -25,7 +28,17 @@ async function writeItems(
   items: TemplateItemInput[],
 ) {
   const clean = items
-    .map((it) => ({ label: it.label.trim(), hint: it.hint?.trim() || null }))
+    .map((it) => {
+      const photoRequired = !!it.photo_required;
+      // A required photo means at least 1; respect a higher minimum if set.
+      const minPhotos = photoRequired ? Math.max(1, it.min_photos ?? 1) : 0;
+      return {
+        label: it.label.trim(),
+        hint: it.hint?.trim() || null,
+        photo_required: photoRequired,
+        min_photos: minPhotos,
+      };
+    })
     .filter((it) => it.label.length > 0);
   if (clean.length === 0) return { error: "Add at least one checklist item." };
 
@@ -35,6 +48,8 @@ async function writeItems(
       org_id: orgId,
       label: it.label,
       hint: it.hint,
+      photo_required: it.photo_required,
+      min_photos: it.min_photos,
       position,
     })),
   );
@@ -57,6 +72,7 @@ export async function createTemplate(input: TemplateInput) {
       org_id: ctx.org.id,
       name: input.name.trim(),
       frequency: input.frequency,
+      category: input.category,
       description: input.description?.trim() || null,
       created_by: ctx.userId,
     })
@@ -90,6 +106,7 @@ export async function updateTemplate(input: TemplateInput & { id: string }) {
     .update({
       name: input.name.trim(),
       frequency: input.frequency,
+      category: input.category,
       description: input.description?.trim() || null,
     })
     .eq("org_id", ctx.org.id)
@@ -131,6 +148,7 @@ export async function seedDefaultTemplate() {
   return createTemplate({
     name: "Standard property check",
     frequency: "monthly",
+    category: "general",
     description: "A good starting point — edit the items to fit your portfolio.",
     items: DEFAULT_CHECKLIST.map((a) => ({ label: a.label, hint: a.hint })),
   });

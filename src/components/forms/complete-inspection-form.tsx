@@ -12,6 +12,12 @@ export interface ChecklistArea {
   key: string;
   label: string;
   hint?: string | null;
+  photoRequired?: boolean;
+  minPhotos?: number;
+}
+
+function requiredCount(area: ChecklistArea): number {
+  return area.photoRequired ? Math.max(1, area.minPhotos ?? 1) : 0;
 }
 
 interface AreaState {
@@ -56,10 +62,13 @@ export function CompleteInspectionForm({
       const items = [];
       for (const area of areas) {
         const a = state[area.key];
+        const needed = requiredCount(area);
 
-        if (a.result !== "na" && a.files.length === 0) {
+        if (a.result !== "na" && needed > 0 && a.files.length < needed) {
           throw new Error(
-            `Add at least one photo for "${area.label}" (or mark it N/A).`,
+            `“${area.label}” needs ${needed} photo${
+              needed === 1 ? "" : "s"
+            } before it can be completed (or mark it N/A).`,
           );
         }
 
@@ -105,7 +114,14 @@ export function CompleteInspectionForm({
           <div key={area.key} className="card p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="font-semibold text-slate-900">{area.label}</h3>
+                <h3 className="font-semibold text-slate-900">
+                  {area.label}
+                  {requiredCount(area) > 0 ? (
+                    <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                      📷 {requiredCount(area)} required
+                    </span>
+                  ) : null}
+                </h3>
                 {area.hint ? (
                   <p className="text-xs text-slate-400">{area.hint}</p>
                 ) : null}

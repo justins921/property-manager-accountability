@@ -187,11 +187,14 @@ export type InspectionFrequency =
 
 export type InspectionItemResult = "pass" | "needs_attention" | "na";
 
+export type TemplateCategory = "interior" | "exterior" | "general";
+
 export interface InspectionTemplate {
   id: string;
   org_id: string;
   name: string;
   frequency: InspectionFrequency;
+  category: TemplateCategory;
   description: string | null;
   created_by: string;
   created_at: string;
@@ -204,6 +207,8 @@ export interface InspectionTemplateItem {
   org_id: string;
   label: string;
   hint: string | null;
+  photo_required: boolean;
+  min_photos: number;
   position: number;
   created_at: string;
 }
@@ -268,6 +273,8 @@ export interface PropertyInspectionItem {
   area_label: string | null;
   result: InspectionItemResult;
   notes: string | null;
+  photo_required: boolean;
+  min_photos: number;
   created_at: string;
 }
 
@@ -293,4 +300,10 @@ export const ITEM_RESULT_LABELS: Record<InspectionItemResult, string> = {
   pass: "Pass",
   needs_attention: "Needs attention",
   na: "N/A",
+};
+
+export const CATEGORY_LABELS: Record<TemplateCategory, string> = {
+  interior: "Interior",
+  exterior: "Exterior",
+  general: "General",
 };

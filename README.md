@@ -49,7 +49,10 @@ to add the routine property-inspection pillar (schedules, inspections, the
 [`supabase/inspection-templates.sql`](supabase/inspection-templates.sql) for
 customizable, reusable checklist templates, then
 [`supabase/property-structure.sql`](supabase/property-structure.sql) for
-buildings & units and inspection targeting. All are additive and idempotent.
+buildings & units and inspection targeting, then
+[`supabase/template-photos.sql`](supabase/template-photos.sql) for template
+categories (interior/exterior) and per-item required photos. All are additive
+and idempotent.
 
 > By default Supabase requires email confirmation. For the smoothest local dev
 > you can disable it under **Authentication → Providers → Email**.

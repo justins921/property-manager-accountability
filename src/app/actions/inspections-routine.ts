@@ -174,11 +174,43 @@ export async function completeInspection(params: {
 
   const { data: existing } = await supabase
     .from("property_inspections")
-    .select("id")
+    .select("id, template_id")
     .eq("org_id", ctx.org.id)
     .eq("id", params.inspection_id)
     .maybeSingle();
   if (!existing) return { error: "Inspection not found." };
+
+  // Build the photo requirement per checklist item from the template (or a
+  // sensible default when there's no template). Enforced server-side so the
+  // requirement can't be bypassed by a tampered client.
+  const requirement = new Map<string, { required: boolean; min: number }>();
+  if (existing.template_id) {
+    const { data: templateItems } = await supabase
+      .from("inspection_template_items")
+      .select("id, photo_required, min_photos")
+      .eq("template_id", existing.template_id);
+    for (const t of templateItems ?? []) {
+      requirement.set(t.id as string, {
+        required: !!t.photo_required,
+        min: (t.min_photos as number) ?? 0,
+      });
+    }
+  }
+
+  for (const item of params.items) {
+    const req =
+      requirement.get(item.area_key) ??
+      // No template → default: at least one photo unless marked N/A.
+      { required: !existing.template_id, min: existing.template_id ? 0 : 1 };
+    const needed = req.required ? Math.max(1, req.min) : 0;
+    if (item.result !== "na" && needed > 0 && item.media.length < needed) {
+      return {
+        error: `“${item.area_label}” needs ${needed} photo${
+          needed === 1 ? "" : "s"
+        } before it can be completed.`,
+      };
+    }
+  }
 
   await supabase
     .from("property_inspection_items")
@@ -186,6 +218,10 @@ export async function completeInspection(params: {
     .eq("inspection_id", params.inspection_id);
 
   for (const item of params.items) {
+    const req = requirement.get(item.area_key) ?? {
+      required: !existing.template_id,
+      min: existing.template_id ? 0 : 1,
+    };
     const { data: itemRow, error: itemError } = await supabase
       .from("property_inspection_items")
       .insert({
@@ -195,6 +231,8 @@ export async function completeInspection(params: {
         area_label: item.area_label,
         result: item.result,
         notes: item.notes || null,
+        photo_required: req.required,
+        min_photos: req.required ? Math.max(1, req.min) : 0,
       })
       .select("id")
       .single();

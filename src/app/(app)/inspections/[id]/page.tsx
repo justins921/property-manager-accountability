@@ -36,11 +36,19 @@ export default async function InspectionDetailPage({
   // Checklist to fill in: the inspection's template, or the built-in default.
   const areas: ChecklistArea[] =
     templateItems.length > 0
-      ? templateItems.map((t) => ({ key: t.id, label: t.label, hint: t.hint }))
+      ? templateItems.map((t) => ({
+          key: t.id,
+          label: t.label,
+          hint: t.hint,
+          photoRequired: t.photo_required,
+          minPhotos: t.min_photos,
+        }))
       : DEFAULT_CHECKLIST.map((a) => ({
           key: a.key,
           label: a.label,
           hint: a.hint,
+          photoRequired: true,
+          minPhotos: 1,
         }));
 
   return (

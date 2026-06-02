@@ -40,8 +40,14 @@ export default async function EditTemplatePage({
           id: template.id,
           name: template.name,
           frequency: template.frequency,
+          category: template.category,
           description: template.description,
-          items: template.items.map((i) => ({ label: i.label, hint: i.hint })),
+          items: template.items.map((i) => ({
+            label: i.label,
+            hint: i.hint,
+            photo_required: i.photo_required,
+            min_photos: i.min_photos,
+          })),
         }}
       />
     </div>
