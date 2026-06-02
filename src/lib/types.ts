@@ -208,10 +208,31 @@ export interface InspectionTemplateItem {
   created_at: string;
 }
 
+export interface Building {
+  id: string;
+  org_id: string;
+  property_id: string;
+  name: string;
+  position: number;
+  created_at: string;
+}
+
+export interface Unit {
+  id: string;
+  org_id: string;
+  property_id: string;
+  building_id: string;
+  name: string;
+  position: number;
+  created_at: string;
+}
+
 export interface InspectionSchedule {
   id: string;
   org_id: string;
   property_id: string;
+  building_id: string | null;
+  unit_id: string | null;
   template_id: string | null;
   manager_id: string | null;
   frequency: InspectionFrequency;
@@ -229,6 +250,8 @@ export interface PropertyInspection {
   property_id: string;
   schedule_id: string | null;
   template_id: string | null;
+  building_id: string | null;
+  unit_id: string | null;
   manager_id: string | null;
   due_date: string;
   completed_at: string | null;

@@ -10,6 +10,7 @@ import {
 import { routineInspectionStatus } from "@/lib/inspections-calc";
 import { requireOrgContext } from "@/lib/org";
 import {
+  getBuildingsWithUnits,
   getInspectionSchedules,
   getMembers,
   getProfileMap,
@@ -19,6 +20,7 @@ import {
   getVacancies,
 } from "@/lib/queries";
 import { PropertySchedules } from "@/components/forms/property-schedules";
+import { PropertyStructure } from "@/components/forms/property-structure";
 import { Card, PageHeader, StatCard, StatusBadge } from "@/components/ui";
 import { STAGE_LABELS } from "@/lib/types";
 import { formatCurrency, formatDate, formatDays } from "@/lib/utils";
@@ -38,6 +40,7 @@ export default async function PropertyDetailPage({
     members,
     allInspections,
     templates,
+    buildings,
   ] = await Promise.all([
     getProperty(ctx.org.id, id),
     getVacancies(ctx.org.id),
@@ -46,6 +49,7 @@ export default async function PropertyDetailPage({
     getMembers(ctx.org.id),
     getRoutineInspections(ctx.org.id),
     getTemplates(ctx.org.id),
+    getBuildingsWithUnits(ctx.org.id, id),
   ]);
   if (!property) notFound();
 
@@ -164,6 +168,22 @@ export default async function PropertyDetailPage({
         </Card>
       </div>
 
+      {/* Property structure: buildings + units */}
+      {isOwner ? (
+        <div className="mt-6">
+          <Card>
+            <h2 className="mb-1 text-lg font-semibold text-slate-900">
+              Structure
+            </h2>
+            <p className="mb-4 text-sm text-slate-500">
+              Buildings and units at this address. Exterior inspections target
+              buildings; interior inspections target units.
+            </p>
+            <PropertyStructure propertyId={id} buildings={buildings} />
+          </Card>
+        </div>
+      ) : null}
+
       {/* Routine inspection schedule + history */}
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card>
@@ -179,6 +199,7 @@ export default async function PropertyDetailPage({
               managers={managers}
               templates={templates}
               schedules={schedules}
+              buildings={buildings}
             />
           ) : schedules.length > 0 ? (
             <ul className="space-y-2 text-sm text-slate-600">

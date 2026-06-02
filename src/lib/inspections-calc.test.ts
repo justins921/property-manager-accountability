@@ -18,6 +18,8 @@ function makeInspection(
     property_id: "p1",
     schedule_id: "s1",
     template_id: null,
+    building_id: null,
+    unit_id: null,
     manager_id: "m1",
     due_date: "2026-06-01",
     completed_at: null,

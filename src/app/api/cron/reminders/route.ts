@@ -165,6 +165,9 @@ async function generateDueInspections(supabase: AdminClient, now: Date) {
         org_id: schedule.org_id,
         property_id: schedule.property_id,
         schedule_id: schedule.id,
+        template_id: schedule.template_id,
+        building_id: schedule.building_id,
+        unit_id: schedule.unit_id,
         manager_id: schedule.manager_id,
         due_date: schedule.next_due_date,
       });

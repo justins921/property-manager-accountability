@@ -49,7 +49,13 @@ export default async function InspectionDetailPage({
         <Link href="/inspections">← Inspections</Link>
       </p>
       <PageHeader
-        title={`${inspection.property?.name ?? "Property"} — Routine inspection`}
+        title={`${inspection.property?.name ?? "Property"}${
+          inspection.unit
+            ? ` · ${inspection.unit.name}`
+            : inspection.building
+              ? ` · ${inspection.building.name}`
+              : ""
+        } — Routine inspection`}
         description={`Due ${formatDate(inspection.due_date)} · Manager: ${
           manager?.full_name || manager?.email || "Unassigned"
         }`}

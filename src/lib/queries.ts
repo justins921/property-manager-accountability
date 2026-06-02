@@ -1,5 +1,6 @@
 import { getReadClient } from "./data-client";
 import type {
+  Building,
   DelayExplanation,
   Inspection,
   InspectionMedia,
@@ -13,8 +14,26 @@ import type {
   PropertyInspectionItem,
   PropertyInspectionMedia,
   Reminder,
+  Unit,
   Vacancy,
 } from "./types";
+
+/** Buildings of a property, each with its units, ordered. */
+export async function getBuildingsWithUnits(
+  orgId: string,
+  propertyId: string,
+): Promise<(Building & { units: Unit[] })[]> {
+  const supabase = await getReadClient();
+  const { data } = await supabase
+    .from("buildings")
+    .select("*, units(*)")
+    .eq("org_id", orgId)
+    .eq("property_id", propertyId)
+    .order("position");
+  const buildings = (data as (Building & { units: Unit[] })[]) ?? [];
+  for (const b of buildings) b.units.sort((a, c) => a.position - c.position);
+  return buildings;
+}
 
 /** All vacancies in an org, newest first, with their property attached. */
 export async function getVacancies(
@@ -140,19 +159,25 @@ export async function getVacancyDetail(
 
 // ── Routine inspections ────────────────────────────────────────────────────
 
-/** All routine inspections in an org, with their property, newest due first. */
+export type InspectionRow = PropertyInspection & {
+  property: Property | null;
+  building: { name: string } | null;
+  unit: { name: string } | null;
+};
+
+/** All routine inspections in an org, with property + target, newest due first. */
 export async function getRoutineInspections(
   orgId: string,
-): Promise<(PropertyInspection & { property: Property | null })[]> {
+): Promise<InspectionRow[]> {
   const supabase = await getReadClient();
   const { data } = await supabase
     .from("property_inspections")
-    .select("*, property:properties(*)")
+    .select(
+      "*, property:properties(*), building:buildings(name), unit:units(name)",
+    )
     .eq("org_id", orgId)
     .order("due_date", { ascending: false });
-  return (
-    (data as (PropertyInspection & { property: Property | null })[]) ?? []
-  );
+  return (data as InspectionRow[]) ?? [];
 }
 
 /** All routine-inspection items in an org (used for scorecard issue counts). */
@@ -167,23 +192,27 @@ export async function getInspectionItems(
   return (data as PropertyInspectionItem[]) ?? [];
 }
 
-/** All schedules for a property, with their template attached. */
+export type ScheduleRow = InspectionSchedule & {
+  template: InspectionTemplate | null;
+  building: { name: string } | null;
+  unit: { name: string } | null;
+};
+
+/** All schedules for a property, with their template + target attached. */
 export async function getInspectionSchedules(
   orgId: string,
   propertyId: string,
-): Promise<(InspectionSchedule & { template: InspectionTemplate | null })[]> {
+): Promise<ScheduleRow[]> {
   const supabase = await getReadClient();
   const { data } = await supabase
     .from("inspection_schedules")
-    .select("*, template:inspection_templates(*)")
+    .select(
+      "*, template:inspection_templates(*), building:buildings(name), unit:units(name)",
+    )
     .eq("org_id", orgId)
     .eq("property_id", propertyId)
     .order("created_at");
-  return (
-    (data as (InspectionSchedule & {
-      template: InspectionTemplate | null;
-    })[]) ?? []
-  );
+  return (data as ScheduleRow[]) ?? [];
 }
 
 /** All inspection templates in an org. */
@@ -238,7 +267,11 @@ export async function getTemplate(
 }
 
 export interface RoutineInspectionDetail {
-  inspection: PropertyInspection & { property: Property | null };
+  inspection: PropertyInspection & {
+    property: Property | null;
+    building: { name: string } | null;
+    unit: { name: string } | null;
+  };
   manager: Profile | null;
   items: PropertyInspectionItem[];
   media: PropertyInspectionMedia[];
@@ -253,7 +286,9 @@ export async function getRoutineInspectionDetail(
   const supabase = await getReadClient();
   const { data: inspection } = await supabase
     .from("property_inspections")
-    .select("*, property:properties(*)")
+    .select(
+      "*, property:properties(*), building:buildings(name), unit:units(name)",
+    )
     .eq("org_id", orgId)
     .eq("id", id)
     .maybeSingle();
@@ -294,7 +329,7 @@ export async function getRoutineInspectionDetail(
   }
 
   return {
-    inspection: inspection as PropertyInspection & { property: Property | null },
+    inspection: inspection as RoutineInspectionDetail["inspection"],
     manager,
     items: (items as PropertyInspectionItem[]) ?? [],
     media: (media as PropertyInspectionMedia[]) ?? [],

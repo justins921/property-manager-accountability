@@ -32,6 +32,13 @@ export default async function InspectionsPage() {
   const managerName = (id: string | null) =>
     (id && profiles.get(id)?.full_name) || "Unassigned";
 
+  const targetText = (i: (typeof inspections)[number]) => {
+    const base = i.property?.name ?? "—";
+    if (i.unit) return `${base} · ${i.unit.name}`;
+    if (i.building) return `${base} · ${i.building.name}`;
+    return base;
+  };
+
   return (
     <div>
       <PageHeader
@@ -83,7 +90,7 @@ export default async function InspectionsPage() {
                       return (
                         <tr key={i.id} className="hover:bg-slate-50">
                           <td className="px-4 py-3 font-medium text-slate-900">
-                            {i.property?.name ?? "—"}
+                            {targetText(i)}
                           </td>
                           <td className="px-4 py-3">
                             <StatusBadge
@@ -144,7 +151,7 @@ export default async function InspectionsPage() {
                             href={`/inspections/${i.id}`}
                             className="font-medium text-slate-900 hover:text-brand-600"
                           >
-                            {i.property?.name ?? "—"}
+                            {targetText(i)}
                           </Link>
                         </td>
                         <td className="px-4 py-3 text-slate-600">

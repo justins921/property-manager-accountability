@@ -5,32 +5,41 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { addSchedule, removeSchedule } from "@/app/actions/inspections-routine";
 import { formatDate } from "@/lib/utils";
+import type { ScheduleRow } from "@/lib/queries";
 import {
   FREQUENCY_LABELS,
-  type InspectionSchedule,
+  type Building,
   type InspectionTemplate,
   type OrgMember,
+  type Unit,
 } from "@/lib/types";
 
-type ScheduleWithTemplate = InspectionSchedule & {
-  template: InspectionTemplate | null;
-};
+type BuildingWithUnits = Building & { units: Unit[] };
+
+function targetLabel(s: ScheduleRow): string {
+  if (s.unit) return s.unit.name;
+  if (s.building) return s.building.name;
+  return "Whole property";
+}
 
 export function PropertySchedules({
   propertyId,
   managers,
   templates,
   schedules,
+  buildings,
 }: {
   propertyId: string;
   managers: OrgMember[];
   templates: InspectionTemplate[];
-  schedules: ScheduleWithTemplate[];
+  schedules: ScheduleRow[];
+  buildings: BuildingWithUnits[];
 }) {
   const router = useRouter();
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [target, setTarget] = useState(""); // "", "b:<id>", or "u:<id>"
   const today = new Date().toISOString().slice(0, 10);
 
   async function add(formData: FormData) {
@@ -43,6 +52,7 @@ export function PropertySchedules({
       return;
     }
     setAdding(false);
+    setTarget("");
     router.refresh();
   }
 
@@ -66,6 +76,9 @@ export function PropertySchedules({
     );
   }
 
+  const buildingId = target.startsWith("b:") ? target.slice(2) : "";
+  const unitId = target.startsWith("u:") ? target.slice(2) : "";
+
   return (
     <div className="space-y-4">
       {schedules.length > 0 ? (
@@ -78,6 +91,9 @@ export function PropertySchedules({
               <div>
                 <p className="font-medium text-slate-900">
                   {s.template?.name ?? "Inspection"}
+                  <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-normal text-slate-500">
+                    {targetLabel(s)}
+                  </span>
                 </p>
                 <p className="text-xs text-slate-500">
                   {FREQUENCY_LABELS[s.frequency]} · next due{" "}
@@ -102,6 +118,35 @@ export function PropertySchedules({
           className="space-y-3 rounded-lg border border-slate-200 p-3"
         >
           <input type="hidden" name="property_id" value={propertyId} />
+          <input type="hidden" name="building_id" value={buildingId} />
+          <input type="hidden" name="unit_id" value={unitId} />
+
+          <div>
+            <label className="label">Applies to</label>
+            <select
+              className="input"
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+            >
+              <option value="">Whole property (exterior)</option>
+              {buildings.map((b) => (
+                <optgroup key={b.id} label={b.name}>
+                  <option value={`b:${b.id}`}>{b.name} (building)</option>
+                  {b.units.map((u) => (
+                    <option key={u.id} value={`u:${u.id}`}>
+                      {b.name} · {u.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            {buildings.length === 0 ? (
+              <p className="mt-1 text-xs text-slate-400">
+                Add buildings &amp; units above to target them individually.
+              </p>
+            ) : null}
+          </div>
+
           <div>
             <label className="label">Template</label>
             <select name="template_id" required className="input" defaultValue="">

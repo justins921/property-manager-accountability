@@ -14,6 +14,8 @@ import type {
 const scheduleSchema = z.object({
   property_id: z.string().uuid(),
   template_id: z.string().uuid(),
+  building_id: z.string().uuid().optional().or(z.literal("")),
+  unit_id: z.string().uuid().optional().or(z.literal("")),
   manager_id: z.string().uuid().optional().or(z.literal("")),
   anchor_date: z.string().min(1),
   active: z.union([z.literal("on"), z.literal("")]).optional(),
@@ -34,8 +36,15 @@ export async function addSchedule(formData: FormData) {
   if (!parsed.success) {
     return { error: parsed.error.errors[0]?.message ?? "Invalid input." };
   }
-  const { property_id, template_id, manager_id, anchor_date, active } =
-    parsed.data;
+  const {
+    property_id,
+    template_id,
+    building_id,
+    unit_id,
+    manager_id,
+    anchor_date,
+    active,
+  } = parsed.data;
 
   const supabase = await createClient();
 
@@ -54,20 +63,25 @@ export async function addSchedule(formData: FormData) {
     "yyyy-MM-dd",
   );
 
-  const { error } = await supabase.from("inspection_schedules").upsert(
-    {
-      org_id: ctx.org.id,
-      property_id,
-      template_id,
-      manager_id: manager_id || null,
-      frequency,
-      anchor_date,
-      next_due_date: nextDue,
-      active: active === "on",
-      created_by: ctx.userId,
-    },
-    { onConflict: "property_id,template_id" },
-  );
+  const row = {
+    org_id: ctx.org.id,
+    property_id,
+    template_id,
+    building_id: building_id || null,
+    unit_id: unit_id || null,
+    manager_id: manager_id || null,
+    frequency,
+    anchor_date,
+    next_due_date: nextDue,
+    active: active === "on",
+    created_by: ctx.userId,
+  };
+
+  // Upsert on the (property, building, unit, template) target so re-adding the
+  // same template to the same target updates rather than duplicates.
+  const { error } = await supabase
+    .from("inspection_schedules")
+    .upsert(row, { onConflict: "property_id,building_id,unit_id,template_id" });
 
   if (error) return { error: error.message };
   revalidatePath(`/properties/${property_id}`);
@@ -95,6 +109,8 @@ export async function removeSchedule(scheduleId: string, propertyId: string) {
 const adhocSchema = z.object({
   property_id: z.string().uuid(),
   template_id: z.string().uuid(),
+  building_id: z.string().uuid().optional().or(z.literal("")),
+  unit_id: z.string().uuid().optional().or(z.literal("")),
   manager_id: z.string().uuid().optional().or(z.literal("")),
   due_date: z.string().optional(),
 });
@@ -107,7 +123,8 @@ export async function createAdHocInspection(formData: FormData) {
   if (!parsed.success) {
     return { error: parsed.error.errors[0]?.message ?? "Invalid input." };
   }
-  const { property_id, template_id, manager_id, due_date } = parsed.data;
+  const { property_id, template_id, building_id, unit_id, manager_id, due_date } =
+    parsed.data;
 
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -116,6 +133,8 @@ export async function createAdHocInspection(formData: FormData) {
       org_id: ctx.org.id,
       property_id,
       template_id,
+      building_id: building_id || null,
+      unit_id: unit_id || null,
       manager_id: manager_id || null,
       due_date: due_date || format(new Date(), "yyyy-MM-dd"),
     })
