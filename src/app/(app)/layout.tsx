@@ -12,16 +12,16 @@ export default async function AppLayout({
   const isAdmin = await isPlatformAdmin({ id: ctx.userId, email: ctx.email });
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen flex-col lg:flex-row">
       <Sidebar
         orgName={ctx.org.name}
         userName={ctx.fullName || ctx.email}
         role={ctx.role}
         isAdmin={isAdmin}
       />
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col">
         {ctx.isAdminView ? (
-          <div className="flex items-center justify-between gap-4 bg-amber-500 px-6 py-2 text-sm font-medium text-white">
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-500 px-4 py-2 text-sm font-medium text-white lg:px-6">
             <span>
               👁️ Viewing <strong>{ctx.org.name}</strong> as platform admin —
               read-only. Changes are disabled.
@@ -36,7 +36,7 @@ export default async function AppLayout({
             </form>
           </div>
         ) : null}
-        <main className="flex-1 overflow-y-auto bg-slate-50 px-8 py-8">
+        <main className="flex-1 overflow-y-auto bg-slate-50 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
           <div className="mx-auto max-w-6xl">{children}</div>
         </main>
       </div>
