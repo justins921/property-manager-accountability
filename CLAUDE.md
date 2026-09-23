@@ -34,6 +34,12 @@ npm run build      # production build
 - **Never** put the service-role key in client code. It lives only in
   `src/lib/supabase/admin.ts`, used by the reminder cron (which must read across
   tenants) and the team-invite action.
+- **Roles**: platform super admin (`profiles.is_super_admin`, set only via
+  service role — see `supabase/super-admin.sql`; `PLATFORM_ADMIN_EMAILS` is a
+  fallback) → org `owner` → org `manager`. Super admins get `/admin`: every
+  org, read-only "view as", and user/role management across orgs
+  (`src/app/actions/admin-users.ts`). Shared add-member logic is in
+  `src/lib/membership.ts`.
 - **All accountability math is pure** and lives in `src/lib/calculations.ts`.
   Add a test in `calculations.test.ts` for any change there. Dates are compared
   as calendar days to avoid timezone drift.

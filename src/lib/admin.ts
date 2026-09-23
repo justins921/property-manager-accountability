@@ -2,24 +2,49 @@
 // Platform super-admin (operator) access.
 //
 // This is the ONLY place the tenant boundary is intentionally crossed. Admins
-// are an explicit email allowlist (PLATFORM_ADMIN_EMAILS, server-only). All
-// reads here use the service-role client and are READ-ONLY — no mutations are
-// exposed through the admin surface. Normal users remain fully isolated by RLS.
+// are flagged with profiles.is_super_admin (plus the PLATFORM_ADMIN_EMAILS
+// allowlist as a bootstrap fallback). Admins can browse any org read-only
+// ("view as") and manage users + roles across orgs. Normal users remain fully
+// isolated by RLS.
 // ============================================================================
 
 import { redirect } from "next/navigation";
 import { createAdminClient } from "./supabase/admin";
 import { createClient } from "./supabase/server";
-import type { Organization, PropertyInspection, Vacancy } from "./types";
+import type {
+  MemberRole,
+  Organization,
+  PropertyInspection,
+  Vacancy,
+} from "./types";
 
-/** Is this email on the platform-admin allowlist? Secure default: no. */
-export function isPlatformAdmin(email: string | null | undefined): boolean {
+/** Is this email on the env allowlist (bootstrap fallback)? Secure default: no. */
+function isEnvAllowlisted(email: string | null | undefined): boolean {
   if (!email) return false;
   const list = (process.env.PLATFORM_ADMIN_EMAILS ?? "")
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
   return list.includes(email.toLowerCase());
+}
+
+/**
+ * Is this user a platform super admin? True when `profiles.is_super_admin` is
+ * set (the source of truth, only changeable with the service role) or the
+ * email is on the PLATFORM_ADMIN_EMAILS allowlist.
+ */
+export async function isPlatformAdmin(
+  user: { id: string; email?: string | null } | null | undefined,
+): Promise<boolean> {
+  if (!user) return false;
+  if (isEnvAllowlisted(user.email)) return true;
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return false;
+  const { data } = await createAdminClient()
+    .from("profiles")
+    .select("is_super_admin")
+    .eq("id", user.id)
+    .maybeSingle();
+  return Boolean(data?.is_super_admin);
 }
 
 /** The signed-in user, if they're a platform admin; otherwise null. */
@@ -31,8 +56,8 @@ export async function getPlatformAdmin(): Promise<{
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user || !isPlatformAdmin(user.email)) return null;
-  return { userId: user.id, email: user.email! };
+  if (!user || !(await isPlatformAdmin(user))) return null;
+  return { userId: user.id, email: user.email ?? "" };
 }
 
 /** Guard for admin-only pages. Non-admins are bounced to their own dashboard. */
@@ -89,4 +114,49 @@ export async function adminListOrganizations(): Promise<OrgSummary[]> {
     activeVacancies: vacancyCounts.get(org.id) ?? 0,
     openInspections: inspectionCounts.get(org.id) ?? 0,
   }));
+}
+
+export interface PlatformUser {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  is_super_admin: boolean;
+  created_at: string;
+  memberships: { org_id: string; org_name: string; role: MemberRole }[];
+}
+
+/** Every user on the platform with their org memberships. */
+export async function adminListUsers(): Promise<PlatformUser[]> {
+  const db = createAdminClient();
+  const [{ data: profiles }, { data: members }, { data: orgs }] =
+    await Promise.all([
+      db
+        .from("profiles")
+        .select("id, email, full_name, is_super_admin, created_at")
+        .order("created_at"),
+      db.from("org_members").select("org_id, user_id, role"),
+      db.from("organizations").select("id, name"),
+    ]);
+
+  const orgName = new Map(
+    ((orgs ?? []) as { id: string; name: string }[]).map((o) => [o.id, o.name]),
+  );
+  const byUser = new Map<string, PlatformUser["memberships"]>();
+  for (const m of (members ?? []) as {
+    org_id: string;
+    user_id: string;
+    role: MemberRole;
+  }[]) {
+    const list = byUser.get(m.user_id) ?? [];
+    list.push({
+      org_id: m.org_id,
+      org_name: orgName.get(m.org_id) ?? "Unknown org",
+      role: m.role,
+    });
+    byUser.set(m.user_id, list);
+  }
+
+  return (
+    (profiles ?? []) as Omit<PlatformUser, "memberships">[]
+  ).map((p) => ({ ...p, memberships: byUser.get(p.id) ?? [] }));
 }

@@ -23,7 +23,7 @@ export async function getReadClient(): Promise<SupabaseClient> {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (user && isPlatformAdmin(user.email)) {
+    if (user && (await isPlatformAdmin(user))) {
       return createAdminClient();
     }
   }

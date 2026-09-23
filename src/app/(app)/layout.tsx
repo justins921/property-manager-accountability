@@ -9,6 +9,7 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const ctx = await requireOrgContext();
+  const isAdmin = await isPlatformAdmin({ id: ctx.userId, email: ctx.email });
 
   return (
     <div className="flex min-h-screen">
@@ -16,7 +17,7 @@ export default async function AppLayout({
         orgName={ctx.org.name}
         userName={ctx.fullName || ctx.email}
         role={ctx.role}
-        isAdmin={isPlatformAdmin(ctx.email)}
+        isAdmin={isAdmin}
       />
       <div className="flex flex-1 flex-col overflow-hidden">
         {ctx.isAdminView ? (

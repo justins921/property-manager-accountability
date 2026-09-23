@@ -48,7 +48,7 @@ export async function getOrgContext(
   // Platform-admin "view as" override.
   const cookieStore = await cookies();
   const viewOrgId = cookieStore.get(ADMIN_VIEW_COOKIE)?.value;
-  if (viewOrgId && isPlatformAdmin(user.email)) {
+  if (viewOrgId && (await isPlatformAdmin(user))) {
     const admin = createAdminClient();
     const { data: org } = await admin
       .from("organizations")
