@@ -6,8 +6,11 @@ import {
   Building2,
   ClipboardCheck,
   ClipboardList,
+  Contact,
   Gauge,
+  Inbox,
   LogOut,
+  ReceiptText,
   Shield,
   Trophy,
   Users,
@@ -17,11 +20,14 @@ import { cn } from "@/lib/utils";
 import type { MemberRole } from "@/lib/types";
 
 const NAV = [
-  { href: "/dashboard", label: "Owner Dashboard", icon: Gauge },
+  { href: "/dashboard", label: "Dashboard", icon: Gauge },
+  { href: "/properties", label: "Properties", icon: Building2 },
+  { href: "/tenants", label: "Tenants", icon: Contact },
+  { href: "/rent-roll", label: "Rent Roll", icon: ReceiptText },
   { href: "/vacancies", label: "Vacancies", icon: ClipboardList },
   { href: "/inspections", label: "Inspections", icon: ClipboardCheck },
-  { href: "/properties", label: "Properties", icon: Building2 },
-  { href: "/scorecard", label: "PM Scorecard", icon: Trophy },
+  { href: "/requests", label: "Owner Requests", icon: Inbox },
+  { href: "/scorecard", label: "Scorecards", icon: Trophy },
   { href: "/team", label: "Team", icon: Users },
 ];
 
@@ -50,7 +56,7 @@ export function Sidebar({
     <aside className="flex w-64 shrink-0 flex-col border-r border-slate-200 bg-white">
       <div className="border-b border-slate-100 px-5 py-5">
         <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">
-          Vacancy Accountability
+          Property Management
         </p>
         <p className="mt-1 truncate text-base font-bold text-slate-900">
           {orgName}

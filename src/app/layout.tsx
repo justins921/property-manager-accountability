@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Vacancy Accountability",
+  title: "Property Management · Accountability built in",
   description:
-    "Track every vacancy from move-out to move-in. Document every promise, measure every delay, and calculate every dollar lost to vacancy.",
+    "Property management software with a two-way scorecard: tenants, leases, rent, vacancies and inspections, plus a clear record of whether managers and owners are each doing their part.",
 };
 
 export default function RootLayout({

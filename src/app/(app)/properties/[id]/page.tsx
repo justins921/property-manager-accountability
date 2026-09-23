@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import {
   buildScorecards,
   daysVacant,
+  ledgerBalance,
+  occupancyLabel,
   turnTime,
   vacancyCost,
   vacancyStatus,
@@ -10,8 +12,11 @@ import {
 import { routineInspectionStatus } from "@/lib/inspections-calc";
 import { requireOrgContext } from "@/lib/org";
 import {
+  entriesByLease,
   getBuildingsWithUnits,
   getInspectionSchedules,
+  getLeases,
+  getLedgerEntries,
   getMembers,
   getProfileMap,
   getProperty,
@@ -21,9 +26,16 @@ import {
 } from "@/lib/queries";
 import { PropertySchedules } from "@/components/forms/property-schedules";
 import { PropertyStructure } from "@/components/forms/property-structure";
+import { BalanceText, OccupancyBadge } from "@/components/leasing";
 import { Card, PageHeader, StatCard, StatusBadge } from "@/components/ui";
 import { STAGE_LABELS } from "@/lib/types";
-import { formatCurrency, formatDate, formatDays } from "@/lib/utils";
+import type { LeaseWithRelations } from "@/lib/types";
+import {
+  formatCurrency,
+  formatDate,
+  formatDays,
+  leaseTenantNames,
+} from "@/lib/utils";
 
 export default async function PropertyDetailPage({
   params,
@@ -41,6 +53,7 @@ export default async function PropertyDetailPage({
     allInspections,
     templates,
     buildings,
+    allLeases,
   ] = await Promise.all([
     getProperty(ctx.org.id, id),
     getVacancies(ctx.org.id),
@@ -50,8 +63,23 @@ export default async function PropertyDetailPage({
     getRoutineInspections(ctx.org.id),
     getTemplates(ctx.org.id),
     getBuildingsWithUnits(ctx.org.id, id),
+    getLeases(ctx.org.id),
   ]);
   if (!property) notFound();
+
+  // Occupancy: the active (else upcoming) lease on each unit.
+  const leases = allLeases.filter((l) => l.property_id === id);
+  const leaseByUnit = new Map<string, LeaseWithRelations>();
+  for (const status of ["upcoming", "active"] as const) {
+    for (const l of leases.filter((x) => x.status === status)) leaseByUnit.set(l.unit_id, l);
+  }
+  const ledger = entriesByLease(
+    await getLedgerEntries(
+      ctx.org.id,
+      Array.from(leaseByUnit.values()).map((l) => l.id),
+    ),
+  );
+  const unitCount = buildings.reduce((n, b) => n + b.units.length, 0);
 
   const now = new Date();
   const vacancies = allVacancies.filter((v) => v.property_id === id);
@@ -101,7 +129,97 @@ export default async function PropertyDetailPage({
 
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <h2 className="mb-4 text-lg font-semibold text-slate-900">Units</h2>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900">Units</h2>
+            <Link href="/rent-roll" className="text-sm font-semibold text-brand-600">
+              Rent roll →
+            </Link>
+          </div>
+          {unitCount === 0 ? (
+            <p className="text-sm text-slate-500">
+              {isOwner
+                ? "No units yet. Add buildings and units under Structure below to start leasing."
+                : "No units yet. Ask an owner to add buildings and units so you can create leases."}
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {buildings
+                .filter((b) => b.units.length > 0)
+                .map((b) => (
+                  <div key={b.id}>
+                    {buildings.length > 1 ? (
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        {b.name}
+                      </p>
+                    ) : null}
+                    <ul className="divide-y divide-slate-100">
+                      {b.units.map((u) => {
+                        const lease = leaseByUnit.get(u.id);
+                        return (
+                          <li key={u.id}>
+                            <Link
+                              href={`/units/${u.id}`}
+                              className="flex items-center justify-between py-3 transition hover:opacity-75"
+                            >
+                              <div>
+                                <p className="font-medium text-slate-900">Unit {u.name}</p>
+                                <p className="text-xs text-slate-500">
+                                  {lease
+                                    ? `${leaseTenantNames(lease)} · ${formatCurrency(lease.monthly_rent)}/mo · ${
+                                        lease.end_date ? `ends ${formatDate(lease.end_date)}` : "month-to-month"
+                                      }`
+                                    : "No current lease"}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-3 text-sm">
+                                {lease ? (
+                                  <BalanceText amount={ledgerBalance(ledger.get(lease.id) ?? [], now)} />
+                                ) : null}
+                                <OccupancyBadge label={lease ? occupancyLabel(lease, now) : "Vacant"} />
+                              </div>
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ))}
+            </div>
+          )}
+        </Card>
+
+        <Card>
+          <h2 className="mb-4 text-lg font-semibold text-slate-900">
+            Manager performance
+          </h2>
+          {scorecards.length === 0 ? (
+            <p className="text-sm text-slate-500">No data yet.</p>
+          ) : (
+            <ul className="space-y-3">
+              {scorecards.map((s) => {
+                const name =
+                  (s.managerId && profiles.get(s.managerId)?.full_name) ||
+                  "Unassigned";
+                return (
+                  <li key={s.managerId ?? "none"} className="text-sm">
+                    <p className="font-medium text-slate-900">{name}</p>
+                    <p className="text-slate-500">
+                      {formatDays(s.avgTurnTime)} avg turn ·{" "}
+                      {s.onTimeCompletionPct === null
+                        ? "—"
+                        : `${Math.round(s.onTimeCompletionPct)}% on time`}
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
+      </div>
+
+      <div className="mt-6">
+        <Card>
+          <h2 className="mb-4 text-lg font-semibold text-slate-900">Vacancies</h2>
           {vacancies.length === 0 ? (
             <p className="text-sm text-slate-500">
               No vacancies recorded for this property.
@@ -135,34 +253,6 @@ export default async function PropertyDetailPage({
                   </Link>
                 </li>
               ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card>
-          <h2 className="mb-4 text-lg font-semibold text-slate-900">
-            Manager performance
-          </h2>
-          {scorecards.length === 0 ? (
-            <p className="text-sm text-slate-500">No data yet.</p>
-          ) : (
-            <ul className="space-y-3">
-              {scorecards.map((s) => {
-                const name =
-                  (s.managerId && profiles.get(s.managerId)?.full_name) ||
-                  "Unassigned";
-                return (
-                  <li key={s.managerId ?? "none"} className="text-sm">
-                    <p className="font-medium text-slate-900">{name}</p>
-                    <p className="text-slate-500">
-                      {formatDays(s.avgTurnTime)} avg turn ·{" "}
-                      {s.onTimeCompletionPct === null
-                        ? "—"
-                        : `${Math.round(s.onTimeCompletionPct)}% on time`}
-                    </p>
-                  </li>
-                );
-              })}
             </ul>
           )}
         </Card>

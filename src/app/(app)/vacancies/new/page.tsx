@@ -1,14 +1,25 @@
 import Link from "next/link";
 import { requireOrgContext } from "@/lib/org";
-import { getMembers, getProperties } from "@/lib/queries";
+import { getMembers, getProperties, getUnits } from "@/lib/queries";
 import { NewVacancyForm } from "@/components/forms/new-vacancy-form";
 import { EmptyState, LinkButton, PageHeader } from "@/components/ui";
 
-export default async function NewVacancyPage() {
+export default async function NewVacancyPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    property_id?: string;
+    unit_id?: string;
+    monthly_rent?: string;
+    move_out_date?: string;
+  }>;
+}) {
+  const params = await searchParams;
   const ctx = await requireOrgContext();
-  const [properties, members] = await Promise.all([
+  const [properties, members, units] = await Promise.all([
     getProperties(ctx.org.id),
     getMembers(ctx.org.id),
+    getUnits(ctx.org.id),
   ]);
 
   const managers = members.filter((m) => m.role === "manager" || m.role === "owner");
@@ -26,7 +37,21 @@ export default async function NewVacancyPage() {
           action={<LinkButton href="/properties">Go to properties</LinkButton>}
         />
       ) : (
-        <NewVacancyForm properties={properties} managers={managers} />
+        <NewVacancyForm
+          properties={properties}
+          managers={managers}
+          units={units.map((u) => ({
+            id: u.id,
+            property_id: u.property_id,
+            label: u.building ? `${u.building.name} · Unit ${u.name}` : `Unit ${u.name}`,
+          }))}
+          defaults={{
+            propertyId: params.property_id,
+            unitId: params.unit_id,
+            monthlyRent: params.monthly_rent,
+            moveOutDate: params.move_out_date,
+          }}
+        />
       )}
       <p className="mt-4 text-sm text-slate-400">
         <Link href="/vacancies">← Back to vacancies</Link>

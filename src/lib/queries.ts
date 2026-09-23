@@ -7,13 +7,17 @@ import type {
   InspectionSchedule,
   InspectionTemplate,
   InspectionTemplateItem,
+  LeaseWithRelations,
+  LedgerEntry,
   OrgMember,
+  OwnerRequest,
   Profile,
   Property,
   PropertyInspection,
   PropertyInspectionItem,
   PropertyInspectionMedia,
   Reminder,
+  Tenant,
   Unit,
   Vacancy,
 } from "./types";
@@ -335,4 +339,147 @@ export async function getRoutineInspectionDetail(
     media: (media as PropertyInspectionMedia[]) ?? [],
     templateItems,
   };
+}
+
+// ── Leasing: tenants, leases, ledger ─────────────────────────────────────────
+
+const LEASE_SELECT =
+  "*, unit:units(*, building:buildings(*)), property:properties(*), lease_tenants(*, tenant:tenants(*))";
+
+export type UnitRow = Unit & {
+  building: Building | null;
+  property: Property | null;
+};
+
+/** Every unit in the org with its building and property, in display order. */
+export async function getUnits(orgId: string): Promise<UnitRow[]> {
+  const supabase = await getReadClient();
+  const { data } = await supabase
+    .from("units")
+    .select("*, building:buildings(*), property:properties(*)")
+    .eq("org_id", orgId);
+  const units = (data as UnitRow[]) ?? [];
+  return units.sort(
+    (a, b) =>
+      (a.property?.name ?? "").localeCompare(b.property?.name ?? "") ||
+      (a.building?.position ?? 0) - (b.building?.position ?? 0) ||
+      a.position - b.position,
+  );
+}
+
+export async function getUnit(orgId: string, id: string): Promise<UnitRow | null> {
+  const supabase = await getReadClient();
+  const { data } = await supabase
+    .from("units")
+    .select("*, building:buildings(*), property:properties(*)")
+    .eq("org_id", orgId)
+    .eq("id", id)
+    .maybeSingle();
+  return (data as UnitRow) ?? null;
+}
+
+export async function getTenants(orgId: string): Promise<Tenant[]> {
+  const supabase = await getReadClient();
+  const { data } = await supabase
+    .from("tenants")
+    .select("*")
+    .eq("org_id", orgId)
+    .order("last_name")
+    .order("first_name");
+  return (data as Tenant[]) ?? [];
+}
+
+export async function getTenant(orgId: string, id: string): Promise<Tenant | null> {
+  const supabase = await getReadClient();
+  const { data } = await supabase
+    .from("tenants")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("id", id)
+    .maybeSingle();
+  return (data as Tenant) ?? null;
+}
+
+/** Leases in the org, newest start first. Optionally narrowed. */
+export async function getLeases(
+  orgId: string,
+  filter: { unitId?: string; vacancyId?: string; ids?: string[] } = {},
+): Promise<LeaseWithRelations[]> {
+  if (filter.ids && filter.ids.length === 0) return [];
+  const supabase = await getReadClient();
+  let query = supabase.from("leases").select(LEASE_SELECT).eq("org_id", orgId);
+  if (filter.unitId) query = query.eq("unit_id", filter.unitId);
+  if (filter.vacancyId) query = query.eq("vacancy_id", filter.vacancyId);
+  if (filter.ids) query = query.in("id", filter.ids);
+  const { data } = await query.order("start_date", { ascending: false });
+  return (data as LeaseWithRelations[]) ?? [];
+}
+
+export async function getLease(
+  orgId: string,
+  id: string,
+): Promise<LeaseWithRelations | null> {
+  const supabase = await getReadClient();
+  const { data } = await supabase
+    .from("leases")
+    .select(LEASE_SELECT)
+    .eq("org_id", orgId)
+    .eq("id", id)
+    .maybeSingle();
+  return (data as LeaseWithRelations) ?? null;
+}
+
+/** Every lease a tenant has been on. */
+export async function getTenantLeases(
+  orgId: string,
+  tenantId: string,
+): Promise<LeaseWithRelations[]> {
+  const supabase = await getReadClient();
+  const { data } = await supabase
+    .from("lease_tenants")
+    .select("lease_id")
+    .eq("org_id", orgId)
+    .eq("tenant_id", tenantId);
+  const ids = ((data as { lease_id: string }[]) ?? []).map((r) => r.lease_id);
+  return getLeases(orgId, { ids });
+}
+
+/** Ledger entries, oldest first. Optionally for specific leases only. */
+export async function getLedgerEntries(
+  orgId: string,
+  leaseIds?: string[],
+): Promise<LedgerEntry[]> {
+  if (leaseIds && leaseIds.length === 0) return [];
+  const supabase = await getReadClient();
+  let query = supabase.from("ledger_entries").select("*").eq("org_id", orgId);
+  if (leaseIds) query = query.in("lease_id", leaseIds);
+  const { data } = await query
+    .order("entry_date", { ascending: true })
+    .order("created_at", { ascending: true });
+  return (data as LedgerEntry[]) ?? [];
+}
+
+/** Group ledger entries by lease id. */
+export function entriesByLease(entries: LedgerEntry[]): Map<string, LedgerEntry[]> {
+  const map = new Map<string, LedgerEntry[]>();
+  for (const e of entries) {
+    const list = map.get(e.lease_id) ?? [];
+    list.push(e);
+    map.set(e.lease_id, list);
+  }
+  return map;
+}
+
+// ── Owner requests ──────────────────────────────────────────────────────────
+
+export type OwnerRequestRow = OwnerRequest & { property: Property | null };
+
+export async function getOwnerRequests(orgId: string): Promise<OwnerRequestRow[]> {
+  const supabase = await getReadClient();
+  const { data } = await supabase
+    .from("owner_requests")
+    .select("*, property:properties(*)")
+    .eq("org_id", orgId)
+    .order("created_at", { ascending: false });
+  return (data as OwnerRequestRow[]) ?? [];
 }

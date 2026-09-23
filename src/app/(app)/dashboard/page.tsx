@@ -1,7 +1,10 @@
 import Link from "next/link";
 import {
   buildScorecards,
+  dateKey,
   daysVacant,
+  pastDueBalance,
+  toCents,
   vacancyCostInRange,
   vacancyStatus,
 } from "@/lib/calculations";
@@ -11,8 +14,13 @@ import {
 } from "@/lib/inspections-calc";
 import { requireOrgContext } from "@/lib/org";
 import {
+  entriesByLease,
+  getLeases,
+  getLedgerEntries,
+  getOwnerRequests,
   getProfileMap,
   getRoutineInspections,
+  getUnits,
   getVacancies,
 } from "@/lib/queries";
 import { Card, LinkButton, PageHeader, StatCard, StatusBadge } from "@/components/ui";
@@ -20,13 +28,36 @@ import { formatCurrency, formatDays } from "@/lib/utils";
 
 export default async function DashboardPage() {
   const ctx = await requireOrgContext();
-  const [vacancies, profiles, inspections] = await Promise.all([
-    getVacancies(ctx.org.id),
-    getProfileMap(ctx.org.id),
-    getRoutineInspections(ctx.org.id),
-  ]);
+  const [vacancies, profiles, inspections, units, leases, entries, requests] =
+    await Promise.all([
+      getVacancies(ctx.org.id),
+      getProfileMap(ctx.org.id),
+      getRoutineInspections(ctx.org.id),
+      getUnits(ctx.org.id),
+      getLeases(ctx.org.id),
+      getLedgerEntries(ctx.org.id),
+      getOwnerRequests(ctx.org.id),
+    ]);
 
   const now = new Date();
+  const today = dateKey(now);
+
+  // Leasing
+  const activeLeases = leases.filter((l) => l.status === "active");
+  const occupiedUnits = new Set(activeLeases.map((l) => l.unit_id)).size;
+  const ledger = entriesByLease(entries);
+  const pastDue =
+    leases.reduce(
+      (sum, l) => sum + toCents(pastDueBalance(ledger.get(l.id) ?? [], now)),
+      0,
+    ) / 100;
+  const monthKey = today.slice(0, 7);
+  const collectedThisMonth =
+    entries
+      .filter((e) => e.type === "payment" && e.entry_date.startsWith(monthKey))
+      .reduce((sum, e) => sum + toCents(e.amount), 0) / 100;
+  const pendingRequests = requests.filter((r) => r.status === "pending");
+  const overdueRequests = pendingRequests.filter((r) => r.due_by < today);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const yearStart = new Date(now.getFullYear(), 0, 1);
 
@@ -60,10 +91,35 @@ export default async function DashboardPage() {
   return (
     <div>
       <PageHeader
-        title="Owner Dashboard"
-        description="Portfolio-wide vacancy accountability at a glance"
+        title="Dashboard"
+        description="Your portfolio at a glance: occupancy, rent, vacancies and what's waiting on whom"
         action={<LinkButton href="/vacancies/new">+ New vacancy</LinkButton>}
       />
+
+      <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          label="Occupancy"
+          value={units.length ? `${Math.round((occupiedUnits / units.length) * 100)}%` : "—"}
+          sub={`${occupiedUnits} of ${units.length} units leased`}
+        />
+        <StatCard label="Rent collected this month" value={formatCurrency(collectedThisMonth)} />
+        <StatCard
+          label="Past-due rent"
+          value={formatCurrency(pastDue)}
+          accent={pastDue > 0 ? "red" : "green"}
+          sub={<Link href="/rent-roll" className="text-brand-600">Rent roll →</Link>}
+        />
+        <StatCard
+          label="Waiting on owner"
+          value={pendingRequests.length}
+          sub={
+            <Link href="/requests" className="text-brand-600">
+              {overdueRequests.length} overdue →
+            </Link>
+          }
+          accent={overdueRequests.length > 0 ? "red" : "default"}
+        />
+      </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Vacant units" value={active.length} />

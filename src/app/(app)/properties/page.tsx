@@ -21,7 +21,7 @@ export default async function PropertiesPage() {
     <div>
       <PageHeader
         title="Properties"
-        description="Your portfolio and per-property vacancy performance"
+        description="Your portfolio: properties, units and how each one is performing"
       />
 
       <div className="mb-6">
@@ -31,7 +31,7 @@ export default async function PropertiesPage() {
       {properties.length === 0 ? (
         <EmptyState
           title="No properties yet"
-          description="Add your first property to start tracking its vacancies."
+          description="Add your first property, then its buildings and units, to start leasing."
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

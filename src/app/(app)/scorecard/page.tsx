@@ -1,25 +1,43 @@
-import { buildScorecards } from "@/lib/calculations";
+import { buildRentCollections, buildScorecards } from "@/lib/calculations";
 import { buildInspectionScorecard } from "@/lib/inspections-calc";
 import { requireOrgContext } from "@/lib/org";
 import {
+  entriesByLease,
   getInspectionItems,
+  getLeases,
+  getLedgerEntries,
   getProfileMap,
   getRoutineInspections,
   getVacancies,
 } from "@/lib/queries";
+import { ScorecardTabs } from "@/components/scorecard-tabs";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
 import { formatCurrency, formatDays, formatPercent } from "@/lib/utils";
 import type { PropertyInspection } from "@/lib/types";
 
 export default async function ScorecardPage() {
   const ctx = await requireOrgContext();
-  const [vacancies, profiles, inspections, items] = await Promise.all([
+  const [vacancies, profiles, inspections, items, leases, entries] = await Promise.all([
     getVacancies(ctx.org.id),
     getProfileMap(ctx.org.id),
     getRoutineInspections(ctx.org.id),
     getInspectionItems(ctx.org.id),
+    getLeases(ctx.org.id),
+    getLedgerEntries(ctx.org.id),
   ]);
   const now = new Date();
+
+  // Rent collection is credited to the property's current manager.
+  const ledger = entriesByLease(entries);
+  const rentCards = buildRentCollections(
+    leases.map((l) => ({
+      managerId: l.property?.manager_id ?? null,
+      entries: ledger.get(l.id) ?? [],
+    })),
+    now,
+  )
+    .filter((s) => s.rentCharges > 0 || s.pastDueBalance > 0)
+    .sort((a, b) => (b.onTimePct ?? -1) - (a.onTimePct ?? -1));
 
   const cards = buildScorecards(vacancies, now)
     .filter((s) => s.totalVacancies > 0)
@@ -42,15 +60,80 @@ export default async function ScorecardPage() {
   return (
     <div>
       <PageHeader
-        title="Property Manager Scorecard"
-        description="Measurable performance across every manager in your portfolio"
+        title="Scorecards"
+        description="Two-way accountability: is each side doing its part?"
       />
+      <ScorecardTabs active="/scorecard" />
 
-      {cards.length === 0 && inspectionCards.length === 0 ? (
+      {cards.length === 0 && inspectionCards.length === 0 && rentCards.length === 0 ? (
         <EmptyState
           title="No performance data yet"
-          description="Once vacancies and routine inspections are recorded, manager scorecards appear here."
+          description="Once vacancies, rent and routine inspections are recorded, manager scorecards appear here."
         />
+      ) : null}
+
+      {rentCards.length > 0 ? (
+        <div className="mb-8">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Rent collection
+          </h2>
+          <Card className="overflow-x-auto p-0">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <th className="px-4 py-3">Manager</th>
+                  <th className="px-4 py-3">Leases</th>
+                  <th className="px-4 py-3">Rent charges due</th>
+                  <th className="px-4 py-3">Collected by due date</th>
+                  <th className="px-4 py-3 text-right">Past-due balance</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {rentCards.map((s) => {
+                  const name =
+                    (s.managerId && profiles.get(s.managerId)?.full_name) ||
+                    "Unassigned";
+                  return (
+                    <tr key={s.managerId ?? "none"}>
+                      <td className="px-4 py-3 font-medium text-slate-900">{name}</td>
+                      <td className="px-4 py-3 text-slate-600">{s.leases}</td>
+                      <td className="px-4 py-3 text-slate-600">{s.rentCharges}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={
+                            s.onTimePct === null
+                              ? "text-slate-400"
+                              : s.onTimePct >= 85
+                                ? "font-semibold text-status-green"
+                                : s.onTimePct >= 70
+                                  ? "font-semibold text-status-yellow"
+                                  : "font-semibold text-status-red"
+                          }
+                        >
+                          {formatPercent(s.onTimePct)}
+                        </span>
+                      </td>
+                      <td
+                        className={
+                          s.pastDueBalance > 0
+                            ? "px-4 py-3 text-right font-semibold text-status-red"
+                            : "px-4 py-3 text-right text-slate-600"
+                        }
+                      >
+                        {formatCurrency(s.pastDueBalance, true)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </Card>
+          <p className="mt-2 text-xs text-slate-400">
+            Credited to each property&rsquo;s assigned manager. A month&rsquo;s
+            rent counts as collected on time when it&rsquo;s fully paid by its
+            due date (oldest charges are paid first).
+          </p>
+        </div>
       ) : null}
 
       {cards.length > 0 ? (

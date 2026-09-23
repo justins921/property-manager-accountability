@@ -11,13 +11,13 @@ import {
   vacancyStatus,
 } from "@/lib/calculations";
 import { requireOrgContext } from "@/lib/org";
-import { getVacancyDetail } from "@/lib/queries";
+import { getLeases, getVacancyDetail } from "@/lib/queries";
 import {
   DEADLINE_LABELS,
   DELAY_REASON_LABELS,
   STAGE_LABELS,
 } from "@/lib/types";
-import { Card, PageHeader, StatCard, StatusBadge } from "@/components/ui";
+import { Card, LinkButton, PageHeader, StatCard, StatusBadge } from "@/components/ui";
 import { DelayForm } from "@/components/forms/delay-form";
 import { InspectionForm } from "@/components/forms/inspection-form";
 import { MilestoneForm } from "@/components/forms/milestone-form";
@@ -31,7 +31,10 @@ export default async function VacancyDetailPage({
 }) {
   const { id } = await params;
   const ctx = await requireOrgContext();
-  const detail = await getVacancyDetail(ctx.org.id, id);
+  const [detail, filledBy] = await Promise.all([
+    getVacancyDetail(ctx.org.id, id),
+    getLeases(ctx.org.id, { vacancyId: id }),
+  ]);
   if (!detail) notFound();
 
   const { vacancy, manager, inspections, delays, reminders } = detail;
@@ -56,6 +59,25 @@ export default async function VacancyDetailPage({
         }`}
         action={<StatusBadge status={status} />}
       />
+
+      {vacancy.date_lease_signed && filledBy.length === 0 ? (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+          <span>
+            Lease signed {formatDate(vacancy.date_lease_signed)}. Create the
+            lease so rent starts posting.
+          </span>
+          <LinkButton href={`/leases/new?vacancy_id=${vacancy.id}`}>Create lease</LinkButton>
+        </div>
+      ) : null}
+      {filledBy[0] ? (
+        <p className="mb-6 text-sm text-slate-500">
+          Filled by{" "}
+          <Link href={`/leases/${filledBy[0].id}`} className="font-medium text-brand-600">
+            the lease starting {formatDate(filledBy[0].start_date)}
+          </Link>
+          .
+        </p>
+      ) : null}
 
       {/* Step 3: vacancy tracking stats */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -263,6 +285,16 @@ export default async function VacancyDetailPage({
               </ul>
             ) : null}
             <DelayForm vacancyId={vacancy.id} />
+            <p className="mt-4 text-xs text-slate-500">
+              Waiting on the owner?{" "}
+              <Link
+                href={`/requests?vacancy_id=${vacancy.id}&property_id=${vacancy.property_id}`}
+                className="font-medium text-brand-600"
+              >
+                Send an owner request
+              </Link>{" "}
+              so the wait shows on the Owner Scorecard.
+            </p>
           </Card>
 
           {/* Reminder log */}

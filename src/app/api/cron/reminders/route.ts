@@ -1,9 +1,14 @@
 import { format } from "date-fns";
 import { NextResponse } from "next/server";
 import {
+  dateKey,
   dueReminder,
+  lateFeesDue,
   nextDeadline,
+  parseDate,
   reminderTypeForDaysUntil,
+  rentAutoKey,
+  rentPeriodsDue,
   vacancyCost,
 } from "@/lib/calculations";
 import {
@@ -19,12 +24,16 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 import type {
   InspectionSchedule,
+  Lease,
+  LedgerEntry,
   Property,
   PropertyInspection,
   Vacancy,
 } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+// Never serve this job's database reads from Next's fetch cache.
+export const fetchCache = "force-no-store";
 export const maxDuration = 60;
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -33,9 +42,12 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 const GENERATION_LEAD_DAYS = 7;
 
 /**
- * Daily cron (configured in vercel.json). Handles both accountability pillars:
- *   1. Vacancy deadline reminders.
- *   2. Routine inspections — generates due occurrences from active schedules
+ * Daily cron (configured in vercel.json):
+ *   1. Leasing — activates upcoming leases on their start date, posts monthly
+ *      rent charges on the due day, and posts late fees after the grace
+ *      period. Both postings are idempotent (unique auto_key per lease).
+ *   2. Vacancy deadline reminders.
+ *   3. Routine inspections — generates due occurrences from active schedules
  *      and sends their reminders.
  *
  * Protected by a shared bearer secret (CRON_SECRET). Vercel Cron sends it
@@ -51,11 +63,12 @@ export async function GET(request: Request) {
   const supabase = createAdminClient();
   const now = new Date();
 
+  const leasing = await processLeasing(supabase, now);
   const vacancy = await processVacancyReminders(supabase, now);
   const generated = await generateDueInspections(supabase, now);
   const inspection = await processInspectionReminders(supabase, now);
 
-  return NextResponse.json({ ok: true, vacancy, generated, inspection });
+  return NextResponse.json({ ok: true, leasing, vacancy, generated, inspection });
 }
 
 /** Look up emails for a set of user ids. */
@@ -76,6 +89,89 @@ async function emailsFor(
     if (p.email) map.set(p.id as string, p.email as string);
   }
   return map;
+}
+
+async function processLeasing(supabase: AdminClient, now: Date) {
+  const today = dateKey(now);
+
+  // 1. Upcoming leases whose start date has arrived become active. If the
+  //    unit still has an active lease, the unique index blocks it and the
+  //    lease stays upcoming until the old one is ended.
+  const { data: upcoming } = await supabase
+    .from("leases")
+    .select("id")
+    .eq("status", "upcoming")
+    .lte("start_date", today);
+  let activated = 0;
+  let blocked = 0;
+  for (const l of upcoming ?? []) {
+    const { error } = await supabase
+      .from("leases")
+      .update({ status: "active" })
+      .eq("id", l.id)
+      .eq("status", "upcoming");
+    if (error) blocked += 1;
+    else activated += 1;
+  }
+
+  // 2. Rent charges and late fees for every active lease.
+  const { data } = await supabase
+    .from("leases")
+    .select("*, ledger_entries(*)")
+    .eq("status", "active");
+  const leases = (data ?? []) as (Lease & { ledger_entries: LedgerEntry[] })[];
+
+  let rentPosted = 0;
+  let feesPosted = 0;
+  for (const lease of leases) {
+    let entries: Pick<LedgerEntry, "type" | "amount" | "entry_date" | "auto_key" | "created_at">[] =
+      lease.ledger_entries;
+    const posted = new Set(entries.map((e) => e.auto_key));
+
+    const rentRows = rentPeriodsDue(lease, now)
+      .filter((p) => !posted.has(rentAutoKey(p.period)))
+      .map((p) => ({
+        org_id: lease.org_id,
+        lease_id: lease.id,
+        type: "charge" as const,
+        amount: lease.monthly_rent,
+        entry_date: p.dueDate,
+        memo: `Rent for ${format(parseDate(p.dueDate), "MMMM yyyy")}`,
+        auto_key: rentAutoKey(p.period),
+      }));
+    if (rentRows.length > 0) {
+      const { data: inserted, error } = await supabase
+        .from("ledger_entries")
+        .upsert(rentRows, { onConflict: "lease_id,auto_key", ignoreDuplicates: true })
+        .select("id");
+      if (error) {
+        console.error("[cron] rent posting failed", lease.id, error.message);
+        continue;
+      }
+      rentPosted += inserted?.length ?? 0;
+      entries = [...entries, ...rentRows.map((r) => ({ ...r, created_at: now.toISOString() }))];
+    }
+
+    const feeRows = lateFeesDue(lease, entries, now).map((f) => ({
+      org_id: lease.org_id,
+      lease_id: lease.id,
+      type: "late_fee" as const,
+      amount: f.amount,
+      entry_date: f.entryDate,
+      memo: `Late fee: ${format(parseDate(`${f.period}-01`), "MMMM yyyy")} rent unpaid after the ${lease.late_fee_grace_days}-day grace period`,
+      auto_key: f.autoKey,
+    }));
+    if (feeRows.length > 0) {
+      const { data: inserted, error } = await supabase
+        .from("ledger_entries")
+        .upsert(feeRows, { onConflict: "lease_id,auto_key", ignoreDuplicates: true })
+        .select("id");
+      if (error) console.error("[cron] late fee posting failed", lease.id, error.message);
+      else feesPosted += inserted?.length ?? 0;
+    }
+  }
+
+  return { activated, blocked, activeLeases: leases.length, rentPosted, feesPosted };
 }
 
 async function processVacancyReminders(supabase: AdminClient, now: Date) {

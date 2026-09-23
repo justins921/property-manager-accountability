@@ -19,7 +19,9 @@ const dateField = z.string().min(1, "required");
 const createSchema = z.object({
   property_id: z.string().uuid(),
   manager_id: z.string().uuid().optional().or(z.literal("")),
-  unit_number: z.string().min(1),
+  unit_id: z.string().uuid().optional().or(z.literal("")),
+  // Required for vacancies without a linked unit; defaults to the unit's name.
+  unit_number: z.string().trim().optional(),
   monthly_rent: z.coerce.number().nonnegative(),
   move_out_date: dateField,
   expected_make_ready_date: dateField,
@@ -38,13 +40,30 @@ export async function createVacancy(formData: FormData) {
   const input = parsed.data;
 
   const supabase = await createClient();
+
+  let unitNumber = input.unit_number ?? "";
+  if (input.unit_id) {
+    const { data: unit } = await supabase
+      .from("units")
+      .select("name, property_id")
+      .eq("org_id", ctx.org.id)
+      .eq("id", input.unit_id)
+      .maybeSingle();
+    if (!unit || unit.property_id !== input.property_id) {
+      return { error: "That unit isn't part of the selected property." };
+    }
+    unitNumber = unitNumber || (unit.name as string);
+  }
+  if (!unitNumber) return { error: "Pick a unit or enter a unit number." };
+
   const { data, error } = await supabase
     .from("vacancies")
     .insert({
       org_id: ctx.org.id,
       property_id: input.property_id,
+      unit_id: input.unit_id || null,
       manager_id: input.manager_id || null,
-      unit_number: input.unit_number,
+      unit_number: unitNumber,
       monthly_rent: input.monthly_rent,
       move_out_date: input.move_out_date,
       expected_make_ready_date: input.expected_make_ready_date,

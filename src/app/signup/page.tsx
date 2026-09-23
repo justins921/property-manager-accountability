@@ -46,7 +46,7 @@ export default function SignupPage() {
   return (
     <AuthShell
       title="Create your account"
-      subtitle="Start holding property managers accountable"
+      subtitle="Property management with accountability built in"
     >
       <form onSubmit={onSubmit} className="space-y-4">
         <div>

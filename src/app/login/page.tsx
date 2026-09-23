@@ -78,7 +78,7 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <AuthShell title="Welcome back" subtitle="Sign in to your accountability dashboard">
+    <AuthShell title="Welcome back" subtitle="Sign in to manage your properties">
       <Suspense>
         <LoginForm />
       </Suspense>

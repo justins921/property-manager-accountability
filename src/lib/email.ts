@@ -29,7 +29,7 @@ export async function sendReminderEmail(params: {
     html: `<div style="font-family:system-ui,sans-serif;font-size:15px;line-height:1.5;color:#111">
       <p>${params.body}</p>
       <hr style="border:none;border-top:1px solid #eee;margin:20px 0"/>
-      <p style="color:#888;font-size:13px">Sent by your Property Manager Accountability Platform.</p>
+      <p style="color:#888;font-size:13px">Sent by your property management platform.</p>
     </div>`,
   });
 

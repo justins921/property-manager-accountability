@@ -1,4 +1,4 @@
-// Domain & database types for the Property Manager Accountability Platform.
+// Domain & database types for the property management platform.
 // These mirror supabase/schema.sql. If you regenerate types with the Supabase
 // CLI you can replace these, but hand-maintained types keep the app readable.
 
@@ -73,6 +73,8 @@ export interface Vacancy {
   id: string;
   org_id: string;
   property_id: string;
+  /** Linked unit (leasing.sql). Older rows may only have unit_number. */
+  unit_id: string | null;
   manager_id: string | null;
   unit_number: string;
   monthly_rent: number;
@@ -306,4 +308,147 @@ export const CATEGORY_LABELS: Record<TemplateCategory, string> = {
   interior: "Interior",
   exterior: "Exterior",
   general: "General",
+};
+
+// ── Leasing: tenants, leases, rent ledger (leasing.sql) ─────────────────────
+
+export type LeaseStatus = "upcoming" | "active" | "ended" | "terminated";
+
+export type LedgerEntryType =
+  | "charge"
+  | "payment"
+  | "credit"
+  | "late_fee"
+  | "deposit";
+
+export type PaymentMethod =
+  | "cash"
+  | "check"
+  | "zelle"
+  | "ach"
+  | "money_order"
+  | "other";
+
+export interface Tenant {
+  id: string;
+  org_id: string;
+  first_name: string;
+  last_name: string;
+  email: string | null;
+  phone: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface Lease {
+  id: string;
+  org_id: string;
+  property_id: string;
+  unit_id: string;
+  vacancy_id: string | null;
+  start_date: string;
+  end_date: string | null;
+  monthly_rent: number;
+  rent_due_day: number;
+  security_deposit: number;
+  late_fee_amount: number;
+  late_fee_grace_days: number;
+  billing_start_date: string;
+  status: LeaseStatus;
+  ended_on: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LeaseTenant {
+  id: string;
+  org_id: string;
+  lease_id: string;
+  tenant_id: string;
+  is_primary: boolean;
+  created_at: string;
+}
+
+export interface LedgerEntry {
+  id: string;
+  org_id: string;
+  lease_id: string;
+  type: LedgerEntryType;
+  amount: number;
+  entry_date: string;
+  memo: string | null;
+  payment_method: PaymentMethod | null;
+  reference: string | null;
+  auto_key: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+/** A lease with the things almost every page needs alongside it. */
+export interface LeaseWithRelations extends Lease {
+  unit: (Unit & { building: Building | null }) | null;
+  property: Property | null;
+  lease_tenants: (LeaseTenant & { tenant: Tenant | null })[];
+}
+
+export const LEASE_STATUS_LABELS: Record<LeaseStatus, string> = {
+  upcoming: "Upcoming",
+  active: "Active",
+  ended: "Ended",
+  terminated: "Terminated",
+};
+
+export const LEDGER_TYPE_LABELS: Record<LedgerEntryType, string> = {
+  charge: "Charge",
+  payment: "Payment",
+  credit: "Credit",
+  late_fee: "Late fee",
+  deposit: "Deposit received",
+};
+
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  cash: "Cash",
+  check: "Check",
+  zelle: "Zelle",
+  ach: "ACH / bank transfer",
+  money_order: "Money order",
+  other: "Other",
+};
+
+// ── Owner requests (two-way accountability) ────────────────────────────────
+
+export type OwnerRequestType = "spending" | "decision" | "reimbursement";
+export type OwnerRequestStatus = "pending" | "approved" | "declined" | "withdrawn";
+
+export interface OwnerRequest {
+  id: string;
+  org_id: string;
+  property_id: string | null;
+  vacancy_id: string | null;
+  type: OwnerRequestType;
+  title: string;
+  details: string | null;
+  amount: number | null;
+  due_by: string;
+  status: OwnerRequestStatus;
+  requested_by: string | null;
+  created_at: string;
+  responded_by: string | null;
+  responded_at: string | null;
+  response_note: string | null;
+}
+
+export const OWNER_REQUEST_TYPE_LABELS: Record<OwnerRequestType, string> = {
+  spending: "Approve spending",
+  decision: "Decision needed",
+  reimbursement: "Reimbursement",
+};
+
+export const OWNER_REQUEST_STATUS_LABELS: Record<OwnerRequestStatus, string> = {
+  pending: "Waiting on owner",
+  approved: "Approved",
+  declined: "Declined",
+  withdrawn: "Withdrawn",
 };
