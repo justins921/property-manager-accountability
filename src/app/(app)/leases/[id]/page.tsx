@@ -88,7 +88,7 @@ export default async function LeaseDetailPage({
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 min-[560px]:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Balance" value={<BalanceText amount={balance} />} sub={`${formatCurrency(pastDueBalance(entries, now), true)} past due${
             scheduled > 0 ? ` · ${formatCurrency(scheduled, true)} scheduled` : ""
           }`}

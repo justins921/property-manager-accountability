@@ -96,7 +96,7 @@ export default async function DashboardPage() {
         action={<LinkButton href="/vacancies/new">+ New vacancy</LinkButton>}
       />
 
-      <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-1 gap-4 min-[560px]:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Occupancy"
           value={units.length ? `${Math.round((occupiedUnits / units.length) * 100)}%` : "—"}
@@ -121,7 +121,7 @@ export default async function DashboardPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 min-[560px]:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Vacant units" value={active.length} />
         <StatCard
           label="Units overdue"

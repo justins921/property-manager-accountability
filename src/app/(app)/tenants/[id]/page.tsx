@@ -52,7 +52,7 @@ export default async function TenantDetailPage({
       />
 
       {current ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 min-[560px]:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Balance" value={<BalanceText amount={ledgerBalance(currentEntries, now)} />} />
           <StatCard label="Rent" value={formatCurrency(current.monthly_rent)} sub={`due on day ${current.rent_due_day}`} />
           <StatCard

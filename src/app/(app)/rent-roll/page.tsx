@@ -74,7 +74,7 @@ export default async function RentRollPage({
         action={<LinkButton href="/leases/new">+ New lease</LinkButton>}
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 min-[560px]:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Occupancy"
           value={units.length ? `${Math.round((occupied / units.length) * 100)}%` : "—"}

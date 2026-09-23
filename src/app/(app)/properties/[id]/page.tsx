@@ -116,7 +116,7 @@ export default async function PropertyDetailPage({
       </p>
       <PageHeader title={property.name} description={property.address ?? undefined} />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 min-[560px]:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Active vacancies" value={active.length} />
         <StatCard label="Avg turn time" value={formatDays(avgTurn)} />
         <StatCard label="Avg vacancy length" value={formatDays(avgVacancy)} />

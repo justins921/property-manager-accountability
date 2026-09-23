@@ -48,7 +48,7 @@ export default async function OwnerScorecardPage() {
         />
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 min-[560px]:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Avg response time" value={formatHours(org.avgResponseHours)} sub={`${org.answered} answered`} />
             <StatCard
               label="Answered by due date"

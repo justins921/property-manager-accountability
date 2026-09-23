@@ -48,7 +48,7 @@ export default async function UnitPage({ params }: { params: Promise<{ id: strin
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 min-[560px]:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Occupancy" value={active ? "Occupied" : "Vacant"} accent={active ? "green" : "red"} />
         <StatCard label="Rent" value={active ? formatCurrency(active.monthly_rent) : "—"} />
         <StatCard
