@@ -19,16 +19,18 @@ import {
   getLedgerEntries,
   getOwnerRequests,
   getProfileMap,
+  getProperties,
   getRoutineInspections,
   getUnits,
   getVacancies,
 } from "@/lib/queries";
+import { GettingStarted } from "@/components/getting-started";
 import { Card, LinkButton, PageHeader, StatCard, StatusBadge } from "@/components/ui";
 import { formatCurrency, formatDays } from "@/lib/utils";
 
 export default async function DashboardPage() {
   const ctx = await requireOrgContext();
-  const [vacancies, profiles, inspections, units, leases, entries, requests] =
+  const [vacancies, profiles, inspections, units, leases, entries, requests, properties] =
     await Promise.all([
       getVacancies(ctx.org.id),
       getProfileMap(ctx.org.id),
@@ -37,6 +39,7 @@ export default async function DashboardPage() {
       getLeases(ctx.org.id),
       getLedgerEntries(ctx.org.id),
       getOwnerRequests(ctx.org.id),
+      getProperties(ctx.org.id),
     ]);
 
   const now = new Date();
@@ -93,7 +96,39 @@ export default async function DashboardPage() {
       <PageHeader
         title="Dashboard"
         description="Your portfolio at a glance: occupancy, rent, vacancies and what's waiting on whom"
-        action={<LinkButton href="/vacancies/new">+ New vacancy</LinkButton>}
+        action={
+          properties.length === 0 ? (
+            <LinkButton href="/properties">+ Add property</LinkButton>
+          ) : (
+            <LinkButton href="/vacancies/new">+ New vacancy</LinkButton>
+          )
+        }
+      />
+
+      <GettingStarted
+        steps={[
+          {
+            label: "Add your first property",
+            hint: "Properties → + Add property. Just a name and address.",
+            href: "/properties",
+            done: properties.length > 0,
+          },
+          {
+            label: "Add its units",
+            hint:
+              ctx.role === "owner"
+                ? "Open the property, then Structure. A single-family home is one click."
+                : "Ask an owner to add buildings and units on the property page.",
+            href: properties[0] ? `/properties/${properties[0].id}` : "/properties",
+            done: units.length > 0,
+          },
+          {
+            label: "Create your first lease",
+            hint: "Add the tenant, rent and due day. Existing tenants can start with an opening balance.",
+            href: "/leases/new",
+            done: leases.length > 0,
+          },
+        ]}
       />
 
       <div className="mb-4 grid grid-cols-1 gap-4 min-[560px]:grid-cols-2 lg:grid-cols-4">
