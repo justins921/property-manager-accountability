@@ -1,7 +1,7 @@
 import type Stripe from "stripe";
 import { dateKey, toCents } from "./calculations";
 import { createAdminClient } from "./supabase/admin";
-import { getStripe, ledgerMethod, paymentMethodLabel } from "./stripe";
+import { getStripe, ledgerMethod, onConnectedAccount, paymentMethodLabel } from "./stripe";
 import type { Lease, PaymentLink } from "./types";
 
 // ============================================================================
@@ -103,7 +103,7 @@ export async function applyPaymentIntent(
       ? await stripe.paymentIntents.retrieve(
           typeof piOrId === "string" ? piOrId : piOrId.id,
           { expand: ["payment_method"] },
-          { stripeAccount: accountId },
+          onConnectedAccount(accountId),
         )
       : piOrId;
 
@@ -185,7 +185,7 @@ export async function applyCheckoutSession(
   const session = await stripe.checkout.sessions.retrieve(
     sessionId,
     { expand: ["payment_intent.payment_method", "setup_intent.payment_method"] },
-    { stripeAccount: accountId },
+    onConnectedAccount(accountId),
   );
   const org = await orgForAccount(db, accountId);
   const meta = session.metadata ?? {};
@@ -236,7 +236,7 @@ export async function ensureCustomer(
       email: details.email ?? undefined,
       metadata: { lease_id: lease.id },
     },
-    { stripeAccount: accountId, idempotencyKey: `customer-${lease.id}` },
+    onConnectedAccount(accountId, { idempotencyKey: `customer-${lease.id}` }),
   );
   await db.from("leases").update({ stripe_customer_id: customer.id }).eq("id", lease.id);
   return customer.id;

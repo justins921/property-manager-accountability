@@ -8,6 +8,23 @@ import type { createAdminClient } from "./supabase/admin";
 // Checkout page; the app only ever stores Stripe IDs and a display label.
 // ============================================================================
 
+/**
+ * Request options that pin a Stripe call to a connected (business) account.
+ * Every call that moves or touches a tenant's money must go through this.
+ * Stripe's SDK silently falls back to the platform account when
+ * `stripeAccount` is missing, so this throws instead: with no connected
+ * account there is no payment, and money can never land on the platform.
+ */
+export function onConnectedAccount(
+  accountId: string | null | undefined,
+  extra: Omit<Stripe.RequestOptions, "stripeAccount"> = {},
+): Stripe.RequestOptions {
+  if (!accountId || !/^acct_[A-Za-z0-9]+$/.test(accountId)) {
+    throw new Error("No connected Stripe account: online payments are off for this portfolio.");
+  }
+  return { ...extra, stripeAccount: accountId };
+}
+
 export function stripeConfigured(): boolean {
   return !!process.env.STRIPE_SECRET_KEY;
 }

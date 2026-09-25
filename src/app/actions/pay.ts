@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { ensureCustomer, stripeAmount } from "@/lib/online-payments";
 import { loadPayLink, payLinkUsable } from "@/lib/pay-links";
-import { getStripe, siteUrl } from "@/lib/stripe";
+import { getStripe, onConnectedAccount, siteUrl } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { tenantName, unitLabel } from "@/lib/utils";
 
@@ -54,7 +54,7 @@ export async function startCheckout(formData: FormData) {
             success_url: returnUrl,
             cancel_url: siteUrl(`/pay/${token}`),
           },
-          { stripeAccount: accountId },
+          onConnectedAccount(accountId),
         )
       : await stripe.checkout.sessions.create(
           {
@@ -79,7 +79,7 @@ export async function startCheckout(formData: FormData) {
             success_url: returnUrl,
             cancel_url: siteUrl(`/pay/${token}`),
           },
-          { stripeAccount: accountId },
+          onConnectedAccount(accountId),
         );
 
   await db

@@ -27,7 +27,7 @@ import {
   rentReminderSubject,
   type RentReminderContext,
 } from "@/lib/reminders";
-import { getStripe, siteUrl, stripeConfigured } from "@/lib/stripe";
+import { getStripe, onConnectedAccount, siteUrl, stripeConfigured } from "@/lib/stripe";
 import { formatCurrency, formatDate, unitLabel } from "@/lib/utils";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type {
@@ -345,10 +345,9 @@ async function processAutopay(supabase: AdminClient, now: Date) {
             attempt: String(due.attempt),
           },
         },
-        {
-          stripeAccount: accountId,
+        onConnectedAccount(accountId, {
           idempotencyKey: `autopay-${lease.id}-${due.period}-${due.attempt}`,
-        },
+        }),
       );
       await applyPaymentIntent(supabase, accountId, pi.id);
       if (pi.status === "succeeded" || pi.status === "processing") {
