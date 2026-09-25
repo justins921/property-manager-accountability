@@ -1,5 +1,6 @@
 import { getReadClient } from "./data-client";
 import type {
+  AutopayAttempt,
   Building,
   DelayExplanation,
   Inspection,
@@ -11,6 +12,7 @@ import type {
   LedgerEntry,
   OrgMember,
   OwnerRequest,
+  PaymentLink,
   Profile,
   Property,
   PropertyInspection,
@@ -20,6 +22,8 @@ import type {
   Tenant,
   Unit,
   Vacancy,
+  WorkOrder,
+  WorkOrderMedia,
 } from "./types";
 
 /** Buildings of a property, each with its units, ordered. */
@@ -482,4 +486,96 @@ export async function getOwnerRequests(orgId: string): Promise<OwnerRequestRow[]
     .eq("org_id", orgId)
     .order("created_at", { ascending: false });
   return (data as OwnerRequestRow[]) ?? [];
+}
+
+// ── Online rent collection ──────────────────────────────────────────────────
+
+export async function getPaymentLinks(
+  orgId: string,
+  leaseIds?: string[],
+): Promise<PaymentLink[]> {
+  if (leaseIds && leaseIds.length === 0) return [];
+  const supabase = await getReadClient();
+  let query = supabase.from("payment_links").select("*").eq("org_id", orgId);
+  if (leaseIds) query = query.in("lease_id", leaseIds);
+  const { data } = await query.order("created_at", { ascending: false });
+  return (data as PaymentLink[]) ?? [];
+}
+
+export async function getAutopayAttempts(
+  orgId: string,
+  leaseIds?: string[],
+): Promise<AutopayAttempt[]> {
+  if (leaseIds && leaseIds.length === 0) return [];
+  const supabase = await getReadClient();
+  let query = supabase.from("autopay_attempts").select("*").eq("org_id", orgId);
+  if (leaseIds) query = query.in("lease_id", leaseIds);
+  const { data } = await query.order("created_at", { ascending: false });
+  return (data as AutopayAttempt[]) ?? [];
+}
+
+/** Group any rows with a lease_id by lease. */
+export function byLease<T extends { lease_id: string }>(rows: T[]): Map<string, T[]> {
+  const map = new Map<string, T[]>();
+  for (const r of rows) {
+    const list = map.get(r.lease_id) ?? [];
+    list.push(r);
+    map.set(r.lease_id, list);
+  }
+  return map;
+}
+
+// ── Work orders ────────────────────────────────────────────────────────────
+
+export type WorkOrderRow = WorkOrder & {
+  property: { name: string } | null;
+  unit: { name: string; building: { name: string } | null } | null;
+};
+
+const WORK_ORDER_SELECT = "*, property:properties(name), unit:units(name, building:buildings(name))";
+
+/** Work orders, newest first. Optionally for one property or unit. */
+export async function getWorkOrders(
+  orgId: string,
+  filter: { propertyId?: string; unitId?: string } = {},
+): Promise<WorkOrderRow[]> {
+  const supabase = await getReadClient();
+  let query = supabase.from("work_orders").select(WORK_ORDER_SELECT).eq("org_id", orgId);
+  if (filter.propertyId) query = query.eq("property_id", filter.propertyId);
+  if (filter.unitId) query = query.eq("unit_id", filter.unitId);
+  const { data } = await query.order("created_at", { ascending: false });
+  return (data as WorkOrderRow[]) ?? [];
+}
+
+export async function getWorkOrder(
+  orgId: string,
+  id: string,
+): Promise<(WorkOrderRow & { media: WorkOrderMedia[] }) | null> {
+  const supabase = await getReadClient();
+  const { data } = await supabase
+    .from("work_orders")
+    .select(`${WORK_ORDER_SELECT}, media:work_order_media(*)`)
+    .eq("org_id", orgId)
+    .eq("id", id)
+    .maybeSingle();
+  return (data as WorkOrderRow & { media: WorkOrderMedia[] }) ?? null;
+}
+
+/** Vendor names already used in this org, for the assign form's suggestions. */
+export async function getVendorSuggestions(
+  orgId: string,
+): Promise<{ name: string; phone: string | null }[]> {
+  const supabase = await getReadClient();
+  const { data } = await supabase
+    .from("work_orders")
+    .select("vendor_name, vendor_phone, updated_at")
+    .eq("org_id", orgId)
+    .not("vendor_name", "is", null)
+    .order("updated_at", { ascending: false })
+    .limit(200);
+  const seen = new Map<string, string | null>();
+  for (const r of (data ?? []) as { vendor_name: string; vendor_phone: string | null }[]) {
+    if (!seen.has(r.vendor_name)) seen.set(r.vendor_name, r.vendor_phone);
+  }
+  return Array.from(seen, ([name, phone]) => ({ name, phone }));
 }

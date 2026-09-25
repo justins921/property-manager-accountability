@@ -72,6 +72,31 @@ npm run build      # production build
   `created_at` / `responded_at`, the content is frozen once sent, answered or
   withdrawn requests are final, and there's no delete. Only the requester can
   withdraw.
+- **Online rent collection** (`supabase/payments.sql`, Stripe Connect): rent
+  goes to each org's own Stripe account; every tenant-money call passes
+  `{ stripeAccount }`. Tenants pay from a pay link (`/pay/[token]`, no login)
+  on Stripe's hosted Checkout, so the app never sees card or bank numbers; it
+  stores only Stripe IDs and a label like "Visa •••• 4242". All Stripe → app
+  state goes through `src/lib/online-payments.ts`, which is idempotent and
+  called from the webhook (`api/stripe/webhook`), the pay page's return, and
+  the cron. Online payments post to the same ledger as `payment` entries with
+  `auto_key = stripe:<payment_intent>`. Autopay is turned on only by the
+  tenant (a trigger stops members turning it on); the cron charges on the
+  due date and retries a failed charge every 3 days, 3 tries max
+  (`autopayChargeDue`). Rent reminders (`rentReminderDue`) go out 3 days
+  before the due date and the day after a missed payment, deduped in
+  `rent_reminders`. Without `STRIPE_SECRET_KEY` it all stays hidden.
+- **Work orders** (`supabase/work-orders.sql`): exactly four statuses, forward
+  only, one step at a time (New → Assigned → In progress → Done), enforced and
+  timestamped by trigger. Vendor is a name + phone label, no vendor accounts.
+  Photos reuse the Inspections pattern: private `property-media` bucket,
+  `{org_id}/work-orders/…`, shown with `MediaGallery`. Tenants report repairs
+  at `/request/[token]` (per-unit token, no login); their photos upload
+  through one-time signed upload URLs into the same bucket.
+- **Public pages** (`/pay`, `/request`, `/api/stripe`) are listed in
+  `PUBLIC_PATHS` in `src/lib/supabase/middleware.ts`, read with the service
+  role, and trust only the unguessable token in the URL. Anything a tenant
+  types is escaped before it goes into an email (`toHtml` in `email.ts`).
 - **Server Components** fetch via `src/lib/queries.ts`; **mutations** go through
   Server Actions in `src/app/actions/*`. Interactive pieces (file upload, forms
   that show inline errors) are client components under `src/components/forms/`.

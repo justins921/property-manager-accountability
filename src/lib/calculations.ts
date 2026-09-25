@@ -796,3 +796,188 @@ export function buildOwnerScorecards(
     buildOwnerScorecard(ownerId, list, asOf),
   );
 }
+
+// ── Online rent collection: autopay, reminders, this month's status ─────────
+
+/** Days between retries after a failed autopay charge. */
+export const AUTOPAY_RETRY_DAYS = 3;
+/** Total tries per month (first charge + retries). */
+export const AUTOPAY_MAX_ATTEMPTS = 3;
+/** Send the "rent is coming up" reminder this many days before the due date. */
+export const RENT_REMINDER_DAYS_BEFORE = 3;
+/** Stop sending a first missed-payment reminder this many days after due. */
+const LATE_REMINDER_WINDOW_DAYS = 10;
+
+export interface AutopayAttemptLike {
+  period: string;
+  attempt: number;
+  status: "processing" | "succeeded" | "failed";
+  attempted_on: string;
+}
+
+type AutopayLease = BillableLease &
+  Pick<
+    Lease,
+    "autopay_enabled" | "autopay_payment_method_id" | "autopay_enabled_at"
+  >;
+
+/** The most recent rent period whose due date is on or before `asOf`. */
+export function currentRentPeriod(
+  lease: BillableLease,
+  asOf: Date,
+): RentPeriod | null {
+  const periods = rentPeriodsDue(lease, asOf);
+  return periods.length ? periods[periods.length - 1] : null;
+}
+
+export interface AutopayCharge {
+  period: string;
+  attempt: number;
+  amount: number;
+}
+
+/**
+ * Should the cron charge this lease's saved payment method today, and for
+ * how much? Charges the balance owed on the due date, then retries a failed
+ * charge every AUTOPAY_RETRY_DAYS days, up to AUTOPAY_MAX_ATTEMPTS in total.
+ * Never charges a month whose due date came before the tenant turned autopay
+ * on, and never while another payment is still processing.
+ */
+export function autopayChargeDue(
+  lease: AutopayLease,
+  entries: LedgerLike[],
+  attempts: AutopayAttemptLike[],
+  asOf: Date,
+  opts: { paymentProcessing?: boolean } = {},
+): AutopayCharge | null {
+  if (lease.status !== "active" || !lease.autopay_enabled) return null;
+  if (!lease.autopay_payment_method_id || !lease.autopay_enabled_at) return null;
+  if (opts.paymentProcessing) return null;
+
+  const current = currentRentPeriod(lease, asOf);
+  if (!current) return null;
+  if (current.dueDate < dateKey(new Date(lease.autopay_enabled_at))) return null;
+
+  const tries = attempts
+    .filter((a) => a.period === current.period)
+    .sort((a, b) => a.attempt - b.attempt);
+  if (tries.some((a) => a.status !== "failed")) return null;
+  if (tries.length >= AUTOPAY_MAX_ATTEMPTS) return null;
+  if (tries.length > 0) {
+    const last = tries[tries.length - 1];
+    const retryOn = dateKey(addDays(parseDate(last.attempted_on), AUTOPAY_RETRY_DAYS));
+    if (dateKey(asOf) < retryOn) return null;
+  }
+
+  const owed = ledgerBalance(entries, asOf);
+  if (owed <= 0) return null;
+  return { period: current.period, attempt: tries.length + 1, amount: owed };
+}
+
+/** Did this month's autopay end in failure (all tries used, or the latest failed)? */
+export function autopayState(
+  attempts: AutopayAttemptLike[],
+  period: string | null,
+): "succeeded" | "processing" | "failed" | null {
+  if (!period) return null;
+  const tries = attempts
+    .filter((a) => a.period === period)
+    .sort((a, b) => a.attempt - b.attempt);
+  if (tries.length === 0) return null;
+  return tries[tries.length - 1].status;
+}
+
+export interface RentReminderDue {
+  kind: "upcoming" | "late";
+  period: string;
+  dueDate: string;
+  /** What the tenant owes: for "upcoming", today's balance plus the rent about to post. */
+  amount: number;
+}
+
+type ReminderLease = BillableLease & Pick<Lease, "monthly_rent">;
+
+/**
+ * Which rent reminder (if any) to send today:
+ *   - "upcoming": RENT_REMINDER_DAYS_BEFORE days (or fewer) before the due
+ *     date, once per month, unless the tenant has already prepaid.
+ *   - "late": from the day after the due date, once per month, when that
+ *     month's rent wasn't paid by its due date and a balance is still owed.
+ * `sent` holds the "<kind>:<period>" keys already sent for this lease.
+ */
+export function rentReminderDue(
+  lease: ReminderLease,
+  entries: LedgerLike[],
+  sent: Set<string>,
+  asOf: Date,
+): RentReminderDue | null {
+  if (lease.status !== "active") return null;
+  const today = dateKey(asOf);
+
+  const current = currentRentPeriod(lease, asOf);
+  if (current && current.dueDate < today && !sent.has(`late:${current.period}`)) {
+    const daysLate = differenceInCalendarDays(asOf, parseDate(current.dueDate));
+    const charge = entries.find(
+      (e) => e.type === "charge" && e.auto_key === rentAutoKey(current.period),
+    );
+    const owed = ledgerBalance(entries, asOf);
+    if (
+      daysLate <= LATE_REMINDER_WINDOW_DAYS &&
+      charge &&
+      !chargePaidBy(entries, charge, current.dueDate) &&
+      owed > 0
+    ) {
+      return { kind: "late", period: current.period, dueDate: current.dueDate, amount: owed };
+    }
+  }
+
+  const nextDue = nextDueDateOnOrAfter(
+    dateKey(addDays(asOf, 1)),
+    lease.rent_due_day,
+  );
+  const billingFrom =
+    lease.billing_start_date > lease.start_date ? lease.billing_start_date : lease.start_date;
+  const period = nextDue.slice(0, 7);
+  const daysUntil = differenceInCalendarDays(parseDate(nextDue), asOf);
+  if (
+    nextDue >= billingFrom &&
+    daysUntil <= RENT_REMINDER_DAYS_BEFORE &&
+    !sent.has(`upcoming:${period}`) &&
+    !entries.some((e) => e.auto_key === rentAutoKey(period))
+  ) {
+    const amount = fromCents(
+      toCents(ledgerBalance(entries, asOf)) + toCents(lease.monthly_rent),
+    );
+    if (amount > 0) return { kind: "upcoming", period, dueDate: nextDue, amount };
+  }
+  return null;
+}
+
+export type MonthStatus =
+  | { state: "paid" }
+  | { state: "outstanding"; amount: number }
+  | { state: "not_due"; dueDate: string }
+  | { state: "none" };
+
+/**
+ * This month's rent for the rent roll: paid, outstanding (with the balance),
+ * or not due yet. "Paid" means this month's rent charge is fully covered.
+ */
+export function monthStatus(
+  lease: BillableLease,
+  entries: LedgerLike[],
+  asOf: Date,
+): MonthStatus {
+  if (lease.status !== "active") return { state: "none" };
+  const month = dateKey(asOf).slice(0, 7);
+  const owed = ledgerBalance(entries, asOf);
+  const charge = entries.find(
+    (e) => e.type === "charge" && e.auto_key === rentAutoKey(month),
+  );
+  if (!charge) {
+    if (owed > 0) return { state: "outstanding", amount: owed };
+    const due = dueDateFor(asOf.getFullYear(), asOf.getMonth(), lease.rent_due_day);
+    return due >= dateKey(asOf) ? { state: "not_due", dueDate: due } : { state: "none" };
+  }
+  return owed > 0 ? { state: "outstanding", amount: owed } : { state: "paid" };
+}

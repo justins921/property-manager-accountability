@@ -32,6 +32,28 @@ Both sides see whether the other is doing their part.
   and 3 / 7 / 14 days overdue) and required delay explanations.
 - When a vacancy's lease is signed, the app offers to create the new lease.
 
+**Online rent collection** (Stripe)
+- Each portfolio connects its own Stripe account, so rent goes straight to
+  the owner's bank.
+- **Pay by link:** the manager sends the tenant a secure link for the amount
+  due. The tenant pays by bank account or card on Stripe's page. No tenant
+  login, and no card or bank numbers are stored in the app.
+- **Autopay:** the tenant can save their payment method on the pay page (or
+  from an autopay link). It's charged on each due date; failed charges retry
+  every 3 days (3 tries) and the lease is flagged on the rent roll.
+- **Reminders:** 3 days before rent is due and the day after a missed
+  payment, with a pay link.
+- Every online payment lands in the same ledger as manual ones, so balances,
+  the rent roll and the scorecards stay in sync with no manual entry.
+
+**Maintenance work orders**
+- Managers create work orders with photos; tenants send repair requests with
+  photos from their unit's request link, no login needed.
+- Four steps, one click each: New → Assigned → In progress → Done. Assigning
+  records the vendor (name + phone); Done records the date and optional cost.
+- Each property shows its work-order history: what was fixed, when, by whom,
+  and what it cost.
+
 **Routine inspections**: recurring, template-based condition checks by
 property, building or unit, with required photos.
 
@@ -76,7 +98,10 @@ buildings & units and inspection targeting, then
 categories (interior/exterior) and per-item required photos, then
 [`supabase/super-admin.sql`](supabase/super-admin.sql) for the platform super
 admin flag, then [`supabase/leasing.sql`](supabase/leasing.sql) for tenants,
-leases, the rent ledger and owner requests. All are additive and idempotent.
+leases, the rent ledger and owner requests, then
+[`supabase/payments.sql`](supabase/payments.sql) for online rent collection and
+[`supabase/work-orders.sql`](supabase/work-orders.sql) for maintenance. All
+are additive and idempotent.
 
 > By default Supabase requires email confirmation. For the smoothest local dev
 > you can disable it under **Authentication → Providers → Email**.
@@ -108,6 +133,21 @@ then create leases (or log a vacancy).
 After signing up once, copy your user id from `select id from auth.users;`,
 paste it into [`supabase/seed.sql`](supabase/seed.sql), and run it.
 
+### 5. (Optional) Online rent collection
+
+1. In Stripe, turn on **Connect** (Settings → Connect).
+2. Add a **Connect** webhook endpoint ("Events on connected accounts") at
+   `https://<your-site>/api/stripe/webhook` with: `checkout.session.completed`,
+   `checkout.session.async_payment_succeeded`,
+   `checkout.session.async_payment_failed`, `payment_intent.succeeded`,
+   `payment_intent.processing`, `payment_intent.payment_failed`,
+   `account.updated`.
+3. Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`. Start with test keys.
+4. An owner clicks **Set up online payments** on the Rent Roll page.
+
+Test mode: pay with card `4242 4242 4242 4242`, or `4000 0000 0000 0341`
+(saves fine, then declines when autopay charges it).
+
 ## Deploying to Vercel
 
 1. Push this repo and import it into Vercel.
@@ -115,7 +155,8 @@ paste it into [`supabase/seed.sql`](supabase/seed.sql), and run it.
    Variables). Set `NEXT_PUBLIC_SITE_URL` to your deployed URL.
 3. `vercel.json` registers a daily cron at 13:00 UTC that calls
    `/api/cron/reminders`. It activates upcoming leases, posts rent and late
-   fees, sends vacancy reminders and generates routine inspections. Vercel
+   fees, charges autopay, sends rent and vacancy reminders and generates
+   routine inspections. Vercel
    automatically authenticates cron requests with
    the `CRON_SECRET` you configure, so set that variable too.
 
@@ -134,11 +175,15 @@ src/
       vacancies/        List, create, and per-vacancy lifecycle
       inspections/      Routine inspections + templates
       requests/         Owner requests (send, approve/decline, history)
+      work-orders/      Work orders (New → Assigned → In progress → Done)
       scorecard/        Two-way scorecards (managers, owners/)
       team/             Invite / manage owners & managers
       admin/            Platform super admin
     actions/            Server actions (tenants, leases, ledger, vacancies…)
-    api/cron/reminders/ Daily job: leasing postings, reminders, inspections
+    api/cron/reminders/ Daily job: rent, late fees, autopay, reminders, inspections
+    api/stripe/webhook/ Stripe Connect webhook (payments, autopay)
+    pay/[token]/        Public pay page (no tenant login)
+    request/[token]/    Public repair request form (no tenant login)
     login, signup, onboarding, auth/callback
   components/           UI + forms (client components)
   lib/
@@ -150,6 +195,8 @@ src/
 supabase/
   schema.sql            Core schema + RLS + storage bucket
   leasing.sql           Tenants, leases, rent ledger, owner requests
+  payments.sql          Online rent collection: pay links, autopay, reminders
+  work-orders.sql       Maintenance work orders + photos
   seed.sql              Optional demo data
 ```
 

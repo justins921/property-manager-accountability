@@ -27,7 +27,7 @@ export async function sendReminderEmail(params: {
     subject: params.subject,
     text: params.body,
     html: `<div style="font-family:system-ui,sans-serif;font-size:15px;line-height:1.5;color:#111">
-      <p>${params.body}</p>
+      <p>${toHtml(params.body)}</p>
       <hr style="border:none;border-top:1px solid #eee;margin:20px 0"/>
       <p style="color:#888;font-size:13px">Sent by your property management platform.</p>
     </div>`,
@@ -38,4 +38,22 @@ export async function sendReminderEmail(params: {
     return false;
   }
   return true;
+}
+
+/**
+ * Plain text → safe HTML. Bodies can include text tenants typed (repair
+ * requests), so everything is escaped first; then bare https links (pay and
+ * request links) are made clickable.
+ */
+export function toHtml(text: string): string {
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+  return escaped.replace(
+    /https?:\/\/[^\s<&]+[^\s<&.,;:!?)]/g,
+    (url) => `<a href="${url}" style="color:#1d4ed8">${url}</a>`,
+  );
 }

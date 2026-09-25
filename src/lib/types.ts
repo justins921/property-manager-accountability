@@ -49,6 +49,9 @@ export interface Organization {
   name: string;
   created_by: string;
   created_at: string;
+  /** Stripe Connect account that receives this org's rent (payments.sql). */
+  stripe_account_id?: string | null;
+  stripe_charges_enabled?: boolean;
 }
 
 export interface OrgMember {
@@ -232,6 +235,8 @@ export interface Unit {
   name: string;
   position: number;
   created_at: string;
+  /** Secret token in the unit's repair-request link (work-orders.sql). */
+  maintenance_token?: string | null;
 }
 
 export interface InspectionSchedule {
@@ -327,6 +332,7 @@ export type PaymentMethod =
   | "zelle"
   | "ach"
   | "money_order"
+  | "card"
   | "other";
 
 export interface Tenant {
@@ -360,6 +366,12 @@ export interface Lease {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  // Autopay (payments.sql). Only the server sets these; members may turn it off.
+  stripe_customer_id?: string | null;
+  autopay_enabled: boolean;
+  autopay_payment_method_id: string | null;
+  autopay_method_label: string | null;
+  autopay_enabled_at: string | null;
 }
 
 export interface LeaseTenant {
@@ -414,6 +426,7 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   zelle: "Zelle",
   ach: "ACH / bank transfer",
   money_order: "Money order",
+  card: "Card",
   other: "Other",
 };
 
@@ -451,4 +464,102 @@ export const OWNER_REQUEST_STATUS_LABELS: Record<OwnerRequestStatus, string> = {
   approved: "Approved",
   declined: "Declined",
   withdrawn: "Withdrawn",
+};
+
+// ── Online rent collection (payments.sql) ──────────────────────────────────
+
+export type PaymentLinkKind = "payment" | "autopay";
+export type PaymentLinkStatus = "open" | "processing" | "paid" | "failed" | "void";
+
+export interface PaymentLink {
+  id: string;
+  org_id: string;
+  lease_id: string;
+  token: string;
+  kind: PaymentLinkKind;
+  amount: number | null;
+  status: PaymentLinkStatus;
+  stripe_session_id: string | null;
+  payment_intent_id: string | null;
+  sent_to: string[];
+  expires_at: string;
+  paid_at: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface AutopayAttempt {
+  id: string;
+  org_id: string;
+  lease_id: string;
+  period: string;
+  attempt: number;
+  amount: number;
+  status: "processing" | "succeeded" | "failed";
+  payment_intent_id: string | null;
+  failure_message: string | null;
+  attempted_on: string;
+  created_at: string;
+}
+
+export const PAYMENT_LINK_STATUS_LABELS: Record<PaymentLinkStatus, string> = {
+  open: "Sent, not paid yet",
+  processing: "Bank payment processing",
+  paid: "Paid",
+  failed: "Payment failed",
+  void: "Cancelled",
+};
+
+// ── Maintenance work orders (work-orders.sql) ──────────────────────────────
+
+export type WorkOrderStatus = "new" | "assigned" | "in_progress" | "done";
+export type WorkOrderSource = "manager" | "tenant";
+
+export interface WorkOrder {
+  id: string;
+  org_id: string;
+  property_id: string;
+  unit_id: string | null;
+  title: string;
+  description: string | null;
+  status: WorkOrderStatus;
+  source: WorkOrderSource;
+  reporter_name: string | null;
+  reporter_contact: string | null;
+  vendor_name: string | null;
+  vendor_phone: string | null;
+  cost: number | null;
+  completed_on: string | null;
+  assigned_at: string | null;
+  started_at: string | null;
+  done_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkOrderMedia {
+  id: string;
+  org_id: string;
+  work_order_id: string;
+  storage_path: string;
+  caption: string | null;
+  created_at: string;
+}
+
+export const WORK_ORDER_STATUSES: WorkOrderStatus[] = ["new", "assigned", "in_progress", "done"];
+
+export const WORK_ORDER_STATUS_LABELS: Record<WorkOrderStatus, string> = {
+  new: "New",
+  assigned: "Assigned",
+  in_progress: "In progress",
+  done: "Done",
+};
+
+/** The single forward action available at each step. */
+export const WORK_ORDER_NEXT_ACTION: Record<WorkOrderStatus, string | null> = {
+  new: "Assign vendor",
+  assigned: "Start work",
+  in_progress: "Mark done",
+  done: null,
 };

@@ -16,6 +16,7 @@ import {
   Shield,
   Trophy,
   Users,
+  Wrench,
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -29,6 +30,7 @@ const NAV = [
   { href: "/rent-roll", label: "Rent Roll", icon: ReceiptText },
   { href: "/vacancies", label: "Vacancies", icon: ClipboardList },
   { href: "/inspections", label: "Inspections", icon: ClipboardCheck },
+  { href: "/work-orders", label: "Work Orders", icon: Wrench },
   { href: "/requests", label: "Owner Requests", icon: Inbox },
   { href: "/scorecard", label: "Scorecards", icon: Trophy },
   { href: "/team", label: "Team", icon: Users },

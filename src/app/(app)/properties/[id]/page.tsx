@@ -23,10 +23,12 @@ import {
   getRoutineInspections,
   getTemplates,
   getVacancies,
+  getWorkOrders,
 } from "@/lib/queries";
 import { PropertySchedules } from "@/components/forms/property-schedules";
 import { PropertyStructure } from "@/components/forms/property-structure";
 import { BalanceText, OccupancyBadge } from "@/components/leasing";
+import { WorkOrderList } from "@/components/work-orders";
 import { Card, PageHeader, StatCard, StatusBadge } from "@/components/ui";
 import { STAGE_LABELS } from "@/lib/types";
 import type { LeaseWithRelations } from "@/lib/types";
@@ -54,6 +56,7 @@ export default async function PropertyDetailPage({
     templates,
     buildings,
     allLeases,
+    workOrders,
   ] = await Promise.all([
     getProperty(ctx.org.id, id),
     getVacancies(ctx.org.id),
@@ -64,6 +67,7 @@ export default async function PropertyDetailPage({
     getTemplates(ctx.org.id),
     getBuildingsWithUnits(ctx.org.id, id),
     getLeases(ctx.org.id),
+    getWorkOrders(ctx.org.id, { propertyId: id }),
   ]);
   if (!property) notFound();
 
@@ -255,6 +259,23 @@ export default async function PropertyDetailPage({
               ))}
             </ul>
           )}
+        </Card>
+      </div>
+
+      <div className="mt-6">
+        <Card>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900">Work orders</h2>
+            {!ctx.isAdminView ? (
+              <Link href={`/work-orders?property_id=${id}`} className="text-sm font-semibold text-brand-600">
+                + New work order
+              </Link>
+            ) : null}
+          </div>
+          <p className="mb-2 text-sm text-slate-500">
+            Everything fixed here, newest first: when, by whom, and what it cost.
+          </p>
+          <WorkOrderList orders={workOrders} showProperty={false} empty="No work orders for this property yet." />
         </Card>
       </div>
 

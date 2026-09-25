@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   answeredOnTime,
+  autopayChargeDue,
+  autopayState,
   buildOwnerScorecard,
   buildOwnerScorecards,
   buildRentCollection,
@@ -11,10 +13,12 @@ import {
   lateFeesDue,
   leaseEndsWithin,
   ledgerBalance,
+  monthStatus,
   nextDueDateOnOrAfter,
   occupancyLabel,
   pastDueBalance,
   rentPeriodsDue,
+  rentReminderDue,
   responseHours,
   suggestedProration,
   type LedgerLike,
@@ -223,6 +227,10 @@ function makeLease(overrides: Partial<Lease> = {}): Lease {
     created_by: "u1",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
+    autopay_enabled: false,
+    autopay_payment_method_id: null,
+    autopay_method_label: null,
+    autopay_enabled_at: null,
     ...overrides,
   };
 }
@@ -521,5 +529,118 @@ describe("buildOwnerScorecard", () => {
     const cards = buildOwnerScorecards(requests, asOf);
     expect(cards.map((c) => c.ownerId).sort()).toEqual(["o1", "o2"]);
     expect(cards.find((c) => c.ownerId === "o1")?.avgResponseHours).toBe(10);
+  });
+});
+
+// ── Online rent collection ──────────────────────────────────────────────────
+
+describe("autopayChargeDue", () => {
+  const lease = makeLease({
+    autopay_enabled: true,
+    autopay_payment_method_id: "pm_1",
+    autopay_enabled_at: "2026-02-15T12:00:00Z",
+  });
+  const mar = entry("charge", 1500, "2026-03-01", "rent:2026-03");
+
+  it("charges the balance on the due date", () => {
+    expect(autopayChargeDue(lease, [mar], [], new Date(2026, 2, 1))).toEqual({
+      period: "2026-03",
+      attempt: 1,
+      amount: 1500,
+    });
+  });
+
+  it("doesn't charge a month due before the tenant turned autopay on", () => {
+    const feb = entry("charge", 1500, "2026-02-01", "rent:2026-02");
+    expect(autopayChargeDue(lease, [feb], [], new Date(2026, 1, 20))).toBeNull();
+  });
+
+  it("does nothing when nothing is owed, when off, or while a payment is processing", () => {
+    const paid = [mar, entry("payment", 1500, "2026-02-28")];
+    expect(autopayChargeDue(lease, paid, [], new Date(2026, 2, 1))).toBeNull();
+    expect(autopayChargeDue({ ...lease, autopay_enabled: false }, [mar], [], new Date(2026, 2, 1))).toBeNull();
+    expect(autopayChargeDue(lease, [mar], [], new Date(2026, 2, 1), { paymentProcessing: true })).toBeNull();
+  });
+
+  it("retries a failed charge every 3 days, up to 3 tries", () => {
+    const failed1 = { period: "2026-03", attempt: 1, status: "failed" as const, attempted_on: "2026-03-01" };
+    expect(autopayChargeDue(lease, [mar], [failed1], new Date(2026, 2, 3))).toBeNull();
+    expect(autopayChargeDue(lease, [mar], [failed1], new Date(2026, 2, 4))?.attempt).toBe(2);
+    const failed2 = { ...failed1, attempt: 2, attempted_on: "2026-03-04" };
+    expect(autopayChargeDue(lease, [mar], [failed1, failed2], new Date(2026, 2, 7))?.attempt).toBe(3);
+    const failed3 = { ...failed1, attempt: 3, attempted_on: "2026-03-07" };
+    expect(autopayChargeDue(lease, [mar], [failed1, failed2, failed3], new Date(2026, 2, 20))).toBeNull();
+  });
+
+  it("never charges twice once a try succeeded or is processing", () => {
+    const ok = { period: "2026-03", attempt: 1, status: "succeeded" as const, attempted_on: "2026-03-01" };
+    const pending = { ...ok, status: "processing" as const };
+    expect(autopayChargeDue(lease, [mar], [ok], new Date(2026, 2, 10))).toBeNull();
+    expect(autopayChargeDue(lease, [mar], [pending], new Date(2026, 2, 10))).toBeNull();
+  });
+
+  it("reports the month's final autopay state", () => {
+    const a = [
+      { period: "2026-03", attempt: 1, status: "failed" as const, attempted_on: "2026-03-01" },
+      { period: "2026-03", attempt: 2, status: "succeeded" as const, attempted_on: "2026-03-04" },
+    ];
+    expect(autopayState(a, "2026-03")).toBe("succeeded");
+    expect(autopayState(a.slice(0, 1), "2026-03")).toBe("failed");
+    expect(autopayState(a, "2026-04")).toBeNull();
+  });
+});
+
+describe("rentReminderDue", () => {
+  const lease = makeLease();
+  const none = new Set<string>();
+
+  it("sends an upcoming reminder 3 days before the due date, once", () => {
+    const entries = [entry("charge", 1500, "2026-02-01", "rent:2026-02"), entry("payment", 1500, "2026-02-01")];
+    expect(rentReminderDue(lease, entries, none, new Date(2026, 1, 25))).toBeNull();
+    expect(rentReminderDue(lease, entries, none, new Date(2026, 1, 26))).toEqual({
+      kind: "upcoming",
+      period: "2026-03",
+      dueDate: "2026-03-01",
+      amount: 1500,
+    });
+    expect(rentReminderDue(lease, entries, new Set(["upcoming:2026-03"]), new Date(2026, 1, 27))).toBeNull();
+  });
+
+  it("includes any balance already owed in the upcoming amount, and skips prepaid tenants", () => {
+    const owing = [entry("charge", 1500, "2026-02-01", "rent:2026-02"), entry("payment", 1000, "2026-02-03")];
+    expect(rentReminderDue(lease, owing, new Set(["late:2026-02"]), new Date(2026, 1, 26))?.amount).toBe(2000);
+    const prepaid = [entry("charge", 1500, "2026-02-01", "rent:2026-02"), entry("payment", 3000, "2026-02-01")];
+    expect(rentReminderDue(lease, prepaid, none, new Date(2026, 1, 26))).toBeNull();
+  });
+
+  it("sends a late reminder the day after an unpaid due date", () => {
+    const entries = [entry("charge", 1500, "2026-03-01", "rent:2026-03")];
+    expect(rentReminderDue(lease, entries, none, new Date(2026, 2, 1))).toBeNull();
+    expect(rentReminderDue(lease, entries, none, new Date(2026, 2, 2))).toEqual({
+      kind: "late",
+      period: "2026-03",
+      dueDate: "2026-03-01",
+      amount: 1500,
+    });
+  });
+
+  it("skips the late reminder when rent was paid on time or it's long past", () => {
+    const paid = [entry("charge", 1500, "2026-03-01", "rent:2026-03"), entry("payment", 1500, "2026-03-01")];
+    expect(rentReminderDue(lease, paid, none, new Date(2026, 2, 2))).toBeNull();
+    const unpaid = [entry("charge", 1500, "2026-03-01", "rent:2026-03")];
+    expect(rentReminderDue(lease, unpaid, none, new Date(2026, 2, 20))).toBeNull();
+  });
+});
+
+describe("monthStatus", () => {
+  const lease = makeLease({ rent_due_day: 5 });
+  it("is 'not due' before this month's rent posts", () => {
+    expect(monthStatus(lease, [], new Date(2026, 2, 3))).toEqual({ state: "not_due", dueDate: "2026-03-05" });
+  });
+  it("is paid or outstanding once it posts", () => {
+    const charge = entry("charge", 1500, "2026-03-05", "rent:2026-03");
+    expect(monthStatus(lease, [charge], new Date(2026, 2, 6))).toEqual({ state: "outstanding", amount: 1500 });
+    const paid = [charge, entry("payment", 1500, "2026-03-05")];
+    expect(monthStatus(lease, paid, new Date(2026, 2, 6))).toEqual({ state: "paid" });
   });
 });

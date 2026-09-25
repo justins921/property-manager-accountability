@@ -23,6 +23,7 @@ import {
   getRoutineInspections,
   getUnits,
   getVacancies,
+  getWorkOrders,
 } from "@/lib/queries";
 import { GettingStarted } from "@/components/getting-started";
 import { Card, LinkButton, PageHeader, StatCard, StatusBadge } from "@/components/ui";
@@ -30,7 +31,7 @@ import { formatCurrency, formatDays } from "@/lib/utils";
 
 export default async function DashboardPage() {
   const ctx = await requireOrgContext();
-  const [vacancies, profiles, inspections, units, leases, entries, requests, properties] =
+  const [vacancies, profiles, inspections, units, leases, entries, requests, properties, workOrders] =
     await Promise.all([
       getVacancies(ctx.org.id),
       getProfileMap(ctx.org.id),
@@ -40,7 +41,10 @@ export default async function DashboardPage() {
       getLedgerEntries(ctx.org.id),
       getOwnerRequests(ctx.org.id),
       getProperties(ctx.org.id),
+      getWorkOrders(ctx.org.id),
     ]);
+  const newWorkOrders = workOrders.filter((w) => w.status === "new");
+  const openWorkOrders = workOrders.filter((w) => w.status !== "done");
 
   const now = new Date();
   const today = dateKey(now);
@@ -237,6 +241,19 @@ export default async function DashboardPage() {
           <h2 className="mb-4 text-lg font-semibold text-slate-900">
             Needs attention
           </h2>
+          {openWorkOrders.length > 0 ? (
+            <Link
+              href="/work-orders"
+              className="mb-3 flex items-center justify-between gap-4 rounded-lg border border-amber-100 bg-amber-50/60 px-3 py-2 text-sm transition hover:bg-amber-50"
+            >
+              <span className="font-medium text-slate-900">
+                {newWorkOrders.length > 0
+                  ? `${newWorkOrders.length} new repair request${newWorkOrders.length === 1 ? "" : "s"}`
+                  : "No new repair requests"}
+              </span>
+              <span className="text-slate-500">{openWorkOrders.length} open work orders →</span>
+            </Link>
+          ) : null}
           {overdue.length === 0 ? (
             <p className="text-sm text-slate-500">
               Nothing overdue. Every active vacancy is on track. 🎉

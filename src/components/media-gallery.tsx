@@ -68,7 +68,7 @@ export function MediaGallery({
               <a href={url} target="_blank" rel="noreferrer">
                 <img
                   src={url}
-                  alt={m.caption ?? "Inspection photo"}
+                  alt={m.caption ?? "Photo"}
                   className="aspect-square w-full object-cover"
                 />
               </a>

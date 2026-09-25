@@ -86,3 +86,79 @@ export function reminderBody(
       )}).`;
   }
 }
+
+// ── Rent: pay links, reminders, autopay ────────────────────────────────────
+
+export function payLinkSubject(kind: "payment" | "autopay", place: string): string {
+  return kind === "autopay"
+    ? `Set up automatic rent payments for ${place}`
+    : `Rent payment for ${place}`;
+}
+
+export function payLinkBody(
+  kind: "payment" | "autopay",
+  ctx: { place: string; amount: string | null; url: string; orgName: string },
+): string {
+  if (kind === "autopay") {
+    return `${ctx.orgName} invited you to pay rent for ${ctx.place} automatically each month. Save a bank account or card here: ${ctx.url} It's charged on the rent due date, and you can ask your property manager to turn it off anytime.`;
+  }
+  return `${ctx.orgName} sent you a payment request for ${ctx.place}: ${ctx.amount}. Pay securely online by bank account or card: ${ctx.url}`;
+}
+
+export interface RentReminderContext {
+  place: string;
+  amount: string;
+  dueDate: string;
+  /** Pay link, when online payments are on and the tenant isn't on autopay. */
+  url: string | null;
+  /** "Visa •••• 4242" when the tenant is on autopay. */
+  autopayLabel: string | null;
+}
+
+export function rentReminderSubject(
+  kind: "upcoming" | "late" | "autopay_failed",
+  ctx: RentReminderContext,
+): string {
+  switch (kind) {
+    case "upcoming":
+      return `Rent for ${ctx.place} is due ${ctx.dueDate}`;
+    case "late":
+      return `Rent for ${ctx.place} is past due`;
+    case "autopay_failed":
+      return `Your automatic rent payment didn't go through`;
+  }
+}
+
+export function rentReminderBody(
+  kind: "upcoming" | "late" | "autopay_failed",
+  ctx: RentReminderContext,
+): string {
+  const pay = ctx.url ? ` Pay online: ${ctx.url}` : "";
+  switch (kind) {
+    case "upcoming":
+      return ctx.autopayLabel
+        ? `Rent of ${ctx.amount} for ${ctx.place} will be charged automatically to ${ctx.autopayLabel} on ${ctx.dueDate}. Nothing to do.`
+        : `Rent of ${ctx.amount} for ${ctx.place} is due on ${ctx.dueDate}.${pay}`;
+    case "late":
+      return `We haven't received rent for ${ctx.place}, due ${ctx.dueDate}. The balance is ${ctx.amount}.${pay}`;
+    case "autopay_failed":
+      return `The automatic payment of ${ctx.amount} for ${ctx.place} didn't go through${
+        ctx.autopayLabel ? ` on ${ctx.autopayLabel}` : ""
+      }. We'll try again in a few days, or you can pay now.${pay}`;
+  }
+}
+
+// ── Maintenance ────────────────────────────────────────────────────────────
+
+export function newRepairRequestSubject(place: string): string {
+  return `New repair request: ${place}`;
+}
+
+export function newRepairRequestBody(ctx: {
+  place: string;
+  title: string;
+  reporter: string;
+  url: string;
+}): string {
+  return `${ctx.reporter} submitted a repair request for ${ctx.place}: "${ctx.title}". It's in your work orders as New: ${ctx.url}`;
+}

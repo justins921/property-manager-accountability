@@ -7,7 +7,17 @@ import {
   vacancyStatus,
 } from "@/lib/calculations";
 import { requireOrgContext } from "@/lib/org";
-import { entriesByLease, getLeases, getLedgerEntries, getUnit, getVacancies } from "@/lib/queries";
+import {
+  entriesByLease,
+  getLeases,
+  getLedgerEntries,
+  getUnit,
+  getVacancies,
+  getWorkOrders,
+} from "@/lib/queries";
+import { siteUrl } from "@/lib/stripe";
+import { RepairLinkBox } from "@/components/forms/work-order-forms";
+import { WorkOrderList } from "@/components/work-orders";
 import { BalanceText, OccupancyBadge } from "@/components/leasing";
 import { Card, LinkButton, PageHeader, StatCard, StatusBadge } from "@/components/ui";
 import { STAGE_LABELS } from "@/lib/types";
@@ -16,10 +26,11 @@ import { formatCurrency, formatDate, formatDays, leaseTenantNames, unitLabel } f
 export default async function UnitPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const ctx = await requireOrgContext();
-  const [unit, leases, allVacancies] = await Promise.all([
+  const [unit, leases, allVacancies, workOrders] = await Promise.all([
     getUnit(ctx.org.id, id),
     getLeases(ctx.org.id, { unitId: id }),
     getVacancies(ctx.org.id),
+    getWorkOrders(ctx.org.id, { unitId: id }),
   ]);
   if (!unit) notFound();
 
@@ -122,6 +133,32 @@ export default async function UnitPage({ params }: { params: Promise<{ id: strin
             </ul>
           )}
         </Card>
+      </div>
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Card>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900">Work orders</h2>
+            {!ctx.isAdminView ? (
+              <Link
+                href={`/work-orders?property_id=${unit.property_id}&unit_id=${unit.id}`}
+                className="text-sm font-semibold text-brand-600"
+              >
+                + New work order
+              </Link>
+            ) : null}
+          </div>
+          <WorkOrderList orders={workOrders} showProperty={false} empty="No work orders for this unit." />
+        </Card>
+        {unit.maintenance_token && !ctx.isAdminView ? (
+          <Card>
+            <h2 className="mb-1 text-lg font-semibold text-slate-900">Tenant repair link</h2>
+            <p className="mb-3 text-sm text-slate-500">
+              Share this with the tenant. They can send a repair request with photos,
+              no login needed, and it shows up here as a New work order.
+            </p>
+            <RepairLinkBox unitId={unit.id} url={siteUrl(`/request/${unit.maintenance_token}`)} />
+          </Card>
+        ) : null}
       </div>
     </div>
   );

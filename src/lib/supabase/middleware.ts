@@ -3,7 +3,16 @@ import { NextResponse, type NextRequest } from "next/server";
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
-const PUBLIC_PATHS = ["/login", "/signup", "/auth", "/api/cron"];
+// /pay and /request are tenant links (no login); /api/stripe is the webhook.
+const PUBLIC_PATHS = [
+  "/login",
+  "/signup",
+  "/auth",
+  "/api/cron",
+  "/api/stripe",
+  "/pay",
+  "/request",
+];
 
 /**
  * Refreshes the Supabase auth session on every request and guards the app.
