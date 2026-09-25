@@ -169,7 +169,8 @@ export default async function LeaseDetailPage({
             ) : null}
           </Card>
 
-          {open ? (
+          {/* Hidden entirely until Stripe is configured for the platform. */}
+          {open && stripeConfigured() ? (
             <Card>
               <h2 className="mb-1 text-lg font-semibold text-slate-900">Online payments</h2>
               {!paymentsOn ? (
